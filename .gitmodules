@@ -1,0 +1,3 @@
+[submodule "thirdParty/RaspberryPiRC"]
+	path = thirdParty/RaspberryPiRC
+	url = https://github.com/TSKangetsu/RaspberryPiRC
