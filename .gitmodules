@@ -1,3 +1,6 @@
 [submodule "thirdParty/RaspberryPiRC"]
 	path = thirdParty/RaspberryPiRC
 	url = https://github.com/TSKangetsu/RaspberryPiRC
+[submodule "thirdparty/RaspberryPiMPU"]
+	path = thirdparty/RaspberryPiMPU
+	url = https://github.com/TSKangetsu/RaspberryPiMPU
