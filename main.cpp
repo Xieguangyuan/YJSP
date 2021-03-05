@@ -5,7 +5,7 @@
 #include "pca9685.h"
 #include <fstream>
 #include <wiringPi.h>
-#include "thirdParty/RaspberryPiRC/RPiIBus/RPiIBus.hpp"
+#include "thirdparty/RaspberryPiRC/RPiIBus/RPiIBus.hpp"
 #include "thirdparty/RaspberryPiMPU/src/MPU9250/MPU9250.hpp"
 #include <thread>
 
@@ -75,138 +75,86 @@ int main(int argc, char *argv[])
             configWrite("../MPU9250Car.json", "_Car_IBUSDATA_Channel_2MIDDLE", Middle1);
             configWrite("../MPU9250Car.json", "_Car_IBUSDATA_Channel_3MIDDLE", Middle2);
             configWrite("../MPU9250Car.json", "_Car_IBUSDATA_Channel_4MIDDLE", Middle3);
-
-            std::cout << "开始校准IBUS数据\n";
-            delay(1000);
-            std::cout << "开始校准通道1最大值，请将右遥感推至向右最大，随机输入一个数并按下回车键:"
-                      << " \n";
-            std::cin >> a;
-            myIbusDevice.IbusRead(IbusData, 4000, 2);
-            Max[0] = IbusData[0];
-            std::cout << "开始校准通道1最小值，请将右遥感推至向左最大，随机输入一个数并按下回车键:"
-                      << " \n";
-            std::cin >> a;
-            myIbusDevice.IbusRead(IbusData, 4000, 2);
-            Min[0] = IbusData[0];
-            //
-            std::cout << "开始校准通道2最大值，请将右遥感推至向上最大，随机输入一个数并按下回车键:"
-                      << " \n";
-            std::cin >> a;
-            myIbusDevice.IbusRead(IbusData, 4000, 2);
-            Max[1] = IbusData[1];
-            std::cout << "开始校准通道2最小值，请将右遥感推至向下最大，随机输入一个数并按下回车键:"
-                      << " \n";
-            std::cin >> a;
-            myIbusDevice.IbusRead(IbusData, 4000, 2);
-            Min[1] = IbusData[1];
-            //
-            std::cout << "开始校准通道3最大值，请将左遥感推至向上最大，随机输入一个数并按下回车键:"
-                      << " \n";
-            std::cin >> a;
-            myIbusDevice.IbusRead(IbusData, 4000, 2);
-            Max[2] = IbusData[2];
-            //
-            std::cout << "开始校准通道3最小值，请将左遥感推至向下最大，随机输入一个数并按下回车键:"
-                      << " \n";
-            std::cin >> a;
-            myIbusDevice.IbusRead(IbusData, 4000, 2);
-            Min[2] = IbusData[2];
-            //
-            std::cout << "开始校准通道4最大值，请将左遥感推至向右最大，随机输入一个数并按下回车键:"
-                      << " \n";
-            std::cin >> a;
-            myIbusDevice.IbusRead(IbusData, 4000, 2);
-            Max[3] = IbusData[3];
-            std::cout << "开始校准通道4最小值，请将左遥感推至向左最大，随机输入一个数并按下回车键:"
-                      << " \n";
-            std::cin >> a;
-            myIbusDevice.IbusRead(IbusData, 4000, 2);
-            Min[3] = IbusData[3];
-            //
-            std::cout << "开始校准通道5最大值，请将左旋钮顺时针扭到尽头，随机输入一个数并按下回车键:"
-                      << " \n";
-            std::cin >> a;
-            myIbusDevice.IbusRead(IbusData, 4000, 2);
-            Max[4] = IbusData[4];
-            std::cout << "开始校准通道5最小值，请将左旋钮逆时针扭到尽头，随机输入一个数并按下回车键:"
-                      << " \n";
-            std::cin >> a;
-            myIbusDevice.IbusRead(IbusData, 4000, 2);
-            Min[4] = IbusData[4];
-            //
-            std::cout << "开始校准通道6最大值，请将右旋钮顺时针扭到尽头，随机输入一个数并按下回车键:"
-                      << " \n";
-            std::cin >> a;
-            myIbusDevice.IbusRead(IbusData, 4000, 2);
-            Max[5] = IbusData[5];
-            std::cout << "开始校准通道6最小值，请将右旋钮逆时针扭到尽头，随机输入一个数并按下回车键:"
-                      << " \n";
-            std::cin >> a;
-            myIbusDevice.IbusRead(IbusData, 4000, 2);
-            Min[5] = IbusData[5];
-
-            for (int i = 0; i < 6; i++)
+            //======================================//
+            for (size_t i = 0; i < 10; i++)
             {
-                std::cout << Max[i] << "  ";
+                Max[i] = Middle0;
             }
-            std::cout << "\n";
-            for (int j = 0; j < 6; j++)
+            for (size_t i = 0; i < 10; i++)
             {
-                std::cout << Min[j] << "  ";
+                Min[i] = Middle0;
             }
-            std::cout << "\n";
 
-            // configWrite("../MPU9250Car.json", "_Car_IBUSDATA_Channel_1MAX", Max[0]);
-            // configWrite("../MPU9250Car.json", "_Car_IBUSDATA_Channel_2MAX", Max[1]);
-            // configWrite("../MPU9250Car.json", "_Car_IBUSDATA_Channel_3MAX", Max[2]);
-            // configWrite("../MPU9250Car.json", "_Car_IBUSDATA_Channel_4MAX", Max[3]);
-            // configWrite("../MPU9250Car.json", "_Car_IBUSDATA_Channel_5MAX", Max[4]);
-            // configWrite("../MPU9250Car.json", "_Car_IBUSDATA_Channel_6MAX", Max[5]);
+            int RCTuneFlag = -1;
+            bool RCTuning = true;
+            std::thread Tuning = std::thread([&] {
+                while (RCTuning)
+                {
+                    lose = myIbusDevice.IbusRead(IbusData, 4000, 2);
+                    if (lose != -1)
+                    {
+                        Max[0] = Max[0] < IbusData[0] ? IbusData[0] : Max[0];
+                        Max[1] = Max[1] < IbusData[1] ? IbusData[1] : Max[1];
+                        Max[2] = Max[2] < IbusData[2] ? IbusData[2] : Max[2];
+                        Max[3] = Max[3] < IbusData[3] ? IbusData[3] : Max[3];
 
-            // configWrite("../MPU9250Car.json", "_Car_IBUSDATA_Channel_1MIN", Min[0]);
-            // configWrite("../MPU9250Car.json", "_Car_IBUSDATA_Channel_2MIN", Min[1]);
-            // configWrite("../MPU9250Car.json", "_Car_IBUSDATA_Channel_3MIN", Min[2]);
-            // configWrite("../MPU9250Car.json", "_Car_IBUSDATA_Channel_4MIN", Min[3]);
-            // configWrite("../MPU9250Car.json", "_Car_IBUSDATA_Channel_5MIN", Min[4]);
-            // configWrite("../MPU9250Car.json", "_Car_IBUSDATA_Channel_6MIN", Min[5]);
+                        Min[0] = Min[0] > IbusData[0] ? IbusData[0] : Min[0];
+                        Min[1] = Min[1] > IbusData[1] ? IbusData[1] : Min[1];
+                        Min[2] = Min[2] > IbusData[2] ? IbusData[2] : Min[2];
+                        Min[3] = Min[3] > IbusData[3] ? IbusData[3] : Min[3];
+                    }
+                }
+            });
 
+            std::cin >> RCTuneFlag;
+            RCTuning = false;
+            Tuning.join();
+
+            configWrite("../MPU9250Car.json", "_Car_IBUSDATA_Channel_1MAX", Max[0]);
+            configWrite("../MPU9250Car.json", "_Car_IBUSDATA_Channel_2MAX", Max[1]);
+            configWrite("../MPU9250Car.json", "_Car_IBUSDATA_Channel_3MAX", Max[2]);
+            configWrite("../MPU9250Car.json", "_Car_IBUSDATA_Channel_4MAX", Max[3]);
+
+            configWrite("../MPU9250Car.json", "_Car_IBUSDATA_Channel_1MIN", Min[0]);
+            configWrite("../MPU9250Car.json", "_Car_IBUSDATA_Channel_2MIN", Min[1]);
+            configWrite("../MPU9250Car.json", "_Car_IBUSDATA_Channel_3MIN", Min[2]);
+            configWrite("../MPU9250Car.json", "_Car_IBUSDATA_Channel_4MIN", Min[3]);
             break;
         }
         case 'M':
         {
-            double AccelCaliData[30];
             TimeMax = 1000;
-            std::cout << "Start MPU Monitor\n";
-            std::cout << "Setting UP MPU9250 ....";
-            std::cout.flush();
-            std::cout << " Done!\n";
             RPiMPU9250 *myMPUTest = new RPiMPU9250(1, false, 1, 0x68, TimeMax, 0);
-            //
-            AccelCaliData[MPUAccelCaliX] = configSettle("../MPU9250Car.json", "_Car_MPU9250_A_X_Cali");
-            AccelCaliData[MPUAccelCaliY] = configSettle("../MPU9250Car.json", "_Car_MPU9250_A_Y_Cali");
-            AccelCaliData[MPUAccelCaliZ] = configSettle("../MPU9250Car.json", "_Car_MPU9250_A_Z_Cali");
-            AccelCaliData[MPUAccelScalX] = configSettle("../MPU9250Car.json", "_Car_MPU9250_A_X_Scal");
-            AccelCaliData[MPUAccelScalY] = configSettle("../MPU9250Car.json", "_Car_MPU9250_A_Y_Scal");
-            AccelCaliData[MPUAccelScalZ] = configSettle("../MPU9250Car.json", "_Car_MPU9250_A_Z_Scal");
-            std::cout << "Calibration Gryo ......";
-            std::cout.flush();
-            myMPUTest->MPUCalibration(AccelCaliData);
-            std::cout << " Done!\n";
-            sleep(1);
-            //
-            myMPUTest->MPUSensorsDataGet();
-            myMPUTest->ResetMPUMixAngle();
-            //
-            system("clear");
-            RCForwardMiddle = configSettle("../MPU9250Car.json", "_Car_IBUSDATA_Channel_2MIDDLE");
-            RCForwardMin = configSettle("../MPU9250Car.json", "_Car_IBUSDATA_Channel_2MIN");
-            RCForwardMax = configSettle("../MPU9250Car.json", "_Car_IBUSDATA_Channel_2MAX");
-            RCHorizontalMiddle = configSettle("../MPU9250Car.json", "_Car_IBUSDATA_Channel_1MIDDLE");
-            RCHorizontalMin = configSettle("../MPU9250Car.json", "_Car_IBUSDATA_Channel_1MIN");
-            RCHorizontalMax = configSettle("../MPU9250Car.json", "_Car_IBUSDATA_Channel_1MAX");
-            RCYawMiddle = configSettle("../MPU9250Car.json", "_Car_IBUSDATA_Channel_4MIDDLE");
-            RCYawMin = configSettle("../MPU9250Car.json", "_Car_IBUSDATA_Channel_4MIN");
-            RCYawMax = configSettle("../MPU9250Car.json", "_Car_IBUSDATA_Channel_4MAX");
+            {
+                double AccelCaliData[30];
+                std::cout << "Start MPU Monitor\n";
+                std::cout << "Setting UP MPU9250 ....";
+                std::cout.flush();
+                std::cout << " Done!\n";
+                AccelCaliData[MPUAccelCaliX] = configSettle("../MPU9250Car.json", "_Car_MPU9250_A_X_Cali");
+                AccelCaliData[MPUAccelCaliY] = configSettle("../MPU9250Car.json", "_Car_MPU9250_A_Y_Cali");
+                AccelCaliData[MPUAccelCaliZ] = configSettle("../MPU9250Car.json", "_Car_MPU9250_A_Z_Cali");
+                AccelCaliData[MPUAccelScalX] = configSettle("../MPU9250Car.json", "_Car_MPU9250_A_X_Scal");
+                AccelCaliData[MPUAccelScalY] = configSettle("../MPU9250Car.json", "_Car_MPU9250_A_Y_Scal");
+                AccelCaliData[MPUAccelScalZ] = configSettle("../MPU9250Car.json", "_Car_MPU9250_A_Z_Scal");
+                std::cout << "Calibration Gryo ......";
+                std::cout.flush();
+                myMPUTest->MPUCalibration(AccelCaliData);
+                std::cout << " Done!\n";
+                sleep(1);
+                myMPUTest->MPUSensorsDataGet();
+                myMPUTest->ResetMPUMixAngle();
+                system("clear");
+                RCForwardMiddle = configSettle("../MPU9250Car.json", "_Car_IBUSDATA_Channel_2MIDDLE");
+                RCForwardMin = configSettle("../MPU9250Car.json", "_Car_IBUSDATA_Channel_2MIN");
+                RCForwardMax = configSettle("../MPU9250Car.json", "_Car_IBUSDATA_Channel_2MAX");
+                RCHorizontalMiddle = configSettle("../MPU9250Car.json", "_Car_IBUSDATA_Channel_1MIDDLE");
+                RCHorizontalMin = configSettle("../MPU9250Car.json", "_Car_IBUSDATA_Channel_1MIN");
+                RCHorizontalMax = configSettle("../MPU9250Car.json", "_Car_IBUSDATA_Channel_1MAX");
+                RCYawMiddle = configSettle("../MPU9250Car.json", "_Car_IBUSDATA_Channel_4MIDDLE");
+                RCYawMin = configSettle("../MPU9250Car.json", "_Car_IBUSDATA_Channel_4MIN");
+                RCYawMax = configSettle("../MPU9250Car.json", "_Car_IBUSDATA_Channel_4MAX");
+            }
 
             std::thread MPUThreading = std::thread([&] {
                 while (true)
@@ -326,6 +274,9 @@ int main(int argc, char *argv[])
                               << "Gryo   Yaw: " << std::setw(7) << std::setfill(' ') << (int)myData._uORB_Gryo___Yaw << "| \n";
                     std::cout << "Real  Roll: " << std::setw(7) << std::setfill(' ') << (int)myData._uORB_Real__Roll << "|"
                               << "Real Pitch: " << std::setw(7) << std::setfill(' ') << (int)myData._uORB_Real_Pitch << "| \n";
+                    std::cout << "AccelX    : " << std::setw(7) << std::setfill(' ') << (int)myData._uORB_Acceleration_X << "cm/s2|"
+                              << "AccelY    : " << std::setw(7) << std::setfill(' ') << (int)myData._uORB_Acceleration_Y << "cm/s2|"
+                              << "AccelZ    : " << std::setw(7) << std::setfill(' ') << (int)myData._uORB_Acceleration_Z << "cm/s2| \n";
                     for (int i = 0; i < 10; i++)
                     {
                         std::cout << IbusData[i] << " ";
