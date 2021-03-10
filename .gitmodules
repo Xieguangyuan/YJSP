@@ -1,21 +1,9 @@
-[submodule "thirdParty/RaspberryPiRC"]
-	path = thirdParty/RaspberryPiRC
-	url = https://github.com/TSKangetsu/RaspberryPiRC
 [submodule "thirdparty/RaspberryPiMPU"]
 	path = thirdparty/RaspberryPiMPU
 	url = https://github.com/TSKangetsu/RaspberryPiMPU
 [submodule "thirdparty/RaspberryPiRC"]
 	path = thirdparty/RaspberryPiRC
 	url = https://github.com/TSKangetsu/RaspberryPiRC
-[submodule "LCD1602_I2C"]
-	path = LCD1602_I2C
-	url = https://github.com/bitbank2/LCD1602
-[submodule "thirdparty/src/LCD1602"]
-	path = thirdparty/src/LCD1602
-	url = https://github.com/bitbank2/LCD1602
-[submodule "thirdparty/LCD1602_I2C"]
-	path = thirdparty/LCD1602_I2C
-	url = https://github.com/bitbank2/LCD1602
 [submodule "thirdparty/QRModule"]
 	path = thirdparty/QRModule
 	url = https://github.com/Xieguangyuan/YJSP_QRModule
