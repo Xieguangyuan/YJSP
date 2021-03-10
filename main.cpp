@@ -3,6 +3,7 @@
 #include <iomanip>
 #include <nlohmann/json.hpp>
 #include "pca9685.h"
+#include "lcd1602.h"
 #include <fstream>
 #include <wiringPi.h>
 #include "thirdparty/RaspberryPiRC/RPiIBus/RPiIBus.hpp"
@@ -25,6 +26,8 @@ int main(int argc, char *argv[])
     Ibus myIbusDevice("/dev/ttyAMA0");
     int fd = pca9685Setup(65, 0x40, 300);
 
+    int SPEED_X = 0;
+    int SPEED_Y = 0;
     double SpeedA1 = 0;
     double SpeedA2 = 0;
     double SpeedB1 = 0;
@@ -162,6 +165,9 @@ int main(int argc, char *argv[])
                     TimeStart = micros();
                     TimeNext = TimeStart - TimeEnd;
                     myData = myMPUTest->MPUSensorsDataGet();
+                    SPEED_X = SPEED_X + myData._uORB_Acceleration_X * 0.001;
+                    SPEED_Y = SPEED_Y + myData._uORB_Acceleration_Y * 0.001;
+
                     TimeEnd = micros();
                     if (TimeMax < ((TimeEnd - TimeStart) + TimeNext) || (TimeNext) < 0)
                         usleep(50);
@@ -199,10 +205,10 @@ int main(int argc, char *argv[])
                     SpeedA2 = RCForward + RCHorizontal + RCYaw;
                     SpeedB1 = RCForward + RCHorizontal - RCYaw;
                     SpeedB2 = RCForward - RCHorizontal - RCYaw;
-                    SpeedA1TO = 200 + (SpeedA1 / 500.f) * (3900.f - 200.f);
-                    SpeedA2TO = 200 + (SpeedA2 / 500.f) * (3900.f - 200.f);
-                    SpeedB1TO = 200 + (SpeedB1 / 500.f) * (3900.f - 200.f);
-                    SpeedB2TO = 200 + (SpeedB2 / 500.f) * (3900.f - 200.f);
+                    SpeedA1TO = (SpeedA1 / 500.f) * 3900.f;
+                    SpeedA2TO = (SpeedA2 / 500.f) * 3900.f;
+                    SpeedB1TO = (SpeedB1 / 500.f) * 3900.f;
+                    SpeedB2TO = (SpeedB2 / 500.f) * 3900.f;
 
                     SpeedA1TO = SpeedA1TO > 3900 ? 3900 : SpeedA1TO;
                     SpeedA2TO = SpeedA2TO > 3900 ? 3900 : SpeedA2TO;
@@ -277,6 +283,9 @@ int main(int argc, char *argv[])
                     std::cout << "AccelX    : " << std::setw(7) << std::setfill(' ') << (int)myData._uORB_Acceleration_X << "cm/s2|"
                               << "AccelY    : " << std::setw(7) << std::setfill(' ') << (int)myData._uORB_Acceleration_Y << "cm/s2|"
                               << "AccelZ    : " << std::setw(7) << std::setfill(' ') << (int)myData._uORB_Acceleration_Z << "cm/s2| \n";
+                    std::cout << "SPPED X    : " << std::setw(7) << std::setfill(' ') << SPEED_X << "cm/s|"
+                              << "SPPED Y    : " << std::setw(7) << std::setfill(' ') << SPEED_Y << "cm/s|\n";
+
                     for (int i = 0; i < 10; i++)
                     {
                         std::cout << IbusData[i] << " ";
@@ -299,13 +308,6 @@ int main(int argc, char *argv[])
         break;
         case 'T':
         {
-            while (true)
-            {
-                int i = 0;
-                std::cin >> i;
-                pca9685PWMWrite(fd, 1, 0, i);
-                pca9685PWMWrite(fd, 0, 0, 0);
-            }
         }
         break;
         }
