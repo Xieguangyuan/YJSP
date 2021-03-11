@@ -8,8 +8,13 @@
 #include <wiringPi.h>
 #include "thirdparty/RaspberryPiRC/RPiIBus/RPiIBus.hpp"
 #include "thirdparty/RaspberryPiMPU/src/MPU9250/MPU9250.hpp"
+// #include "thirdparty/QRModule/src/qrscanner.hpp"
 #include <thread>
+#include <opencv2/opencv.hpp>
 
+void PIDCacl(float &inputData, float &outputData,
+             float &last_I_Data, float &last_D_Data,
+             float P_Gain, float I_Gain, float D_Gain, float I_Max);
 void configWrite(const char *configDir, const char *Target, double obj);
 double configSettle(const char *configDir, const char *Target);
 
@@ -26,8 +31,8 @@ int main(int argc, char *argv[])
     Ibus myIbusDevice("/dev/ttyAMA0");
     int fd = pca9685Setup(65, 0x40, 300);
 
-    int SPEED_X = 0;
-    int SPEED_Y = 0;
+    double SPEED_X = 0;
+    double SPEED_Y = 0;
     double SpeedA1 = 0;
     double SpeedA2 = 0;
     double SpeedB1 = 0;
@@ -39,6 +44,15 @@ int main(int argc, char *argv[])
     int RCForward, RCForwardMax, RCForwardMin, RCForwardMiddle,
         RCHorizontal, RCHorizontalMax, RCHorizontalMin, RCHorizontalMiddle,
         RCYaw, RCYawMax, RCYawMin, RCYawMiddle;
+    float TotalForward;
+    float TotalHorizontal;
+    float TotalYaw;
+
+    float PIDYawPGain = 1.5;
+    float PIDYawIGain = 0.02;
+    float PIDYawDGain = 0.1;
+    float PIDYawLastIData = 0;
+    float PIDYawLastDData = 0;
 
     int ClearCount = 0;
 
@@ -165,8 +179,17 @@ int main(int argc, char *argv[])
                     TimeStart = micros();
                     TimeNext = TimeStart - TimeEnd;
                     myData = myMPUTest->MPUSensorsDataGet();
-                    SPEED_X = SPEED_X + myData._uORB_Acceleration_X * 0.001;
-                    SPEED_Y = SPEED_Y + myData._uORB_Acceleration_Y * 0.001;
+                    SPEED_X = SPEED_X + (myData._uORB_Acceleration_X * 0.001);
+                    SPEED_Y = SPEED_Y + (myData._uORB_Acceleration_Y * 0.001);
+
+                    {
+                        TotalForward = RCForward;
+                        TotalHorizontal = RCHorizontal;
+                        float YawInput = (RCYaw + myData._uORB_Gryo___Yaw * 5);
+                        YawInput = YawInput > 500.f ? 500.f : YawInput;
+                        PIDCacl(YawInput, TotalYaw, PIDYawLastIData,
+                                PIDYawLastDData, PIDYawPGain, PIDYawIGain, PIDYawDGain, 80.f);
+                    }
 
                     TimeEnd = micros();
                     if (TimeMax < ((TimeEnd - TimeStart) + TimeNext) || (TimeNext) < 0)
@@ -201,10 +224,10 @@ int main(int argc, char *argv[])
             std::thread ESCThreading = std::thread([&] {
                 while (true)
                 {
-                    SpeedA1 = RCForward - RCHorizontal + RCYaw;
-                    SpeedA2 = RCForward + RCHorizontal + RCYaw;
-                    SpeedB1 = RCForward + RCHorizontal - RCYaw;
-                    SpeedB2 = RCForward - RCHorizontal - RCYaw;
+                    SpeedA1 = TotalForward - TotalHorizontal - TotalYaw;
+                    SpeedA2 = TotalForward + TotalHorizontal + TotalYaw;
+                    SpeedB1 = TotalForward + TotalHorizontal - TotalYaw;
+                    SpeedB2 = TotalForward - TotalHorizontal + TotalYaw;
                     SpeedA1TO = (SpeedA1 / 500.f) * 3900.f;
                     SpeedA2TO = (SpeedA2 / 500.f) * 3900.f;
                     SpeedB1TO = (SpeedB1 / 500.f) * 3900.f;
@@ -292,9 +315,9 @@ int main(int argc, char *argv[])
                     }
                     std::cout << "\n";
 
-                    std::cout << "RCForward: " << RCForward << "           \n";
-                    std::cout << "RCHor: " << RCHorizontal << "             \n";
-                    std::cout << "RCYaw: " << RCYaw << "                \n";
+                    std::cout << "RCForward: " << TotalForward << "           \n";
+                    std::cout << "RCHor: " << TotalHorizontal << "             \n";
+                    std::cout << "RCYaw: " << TotalYaw << "                \n";
                     std::cout << "speed A1 " << SpeedA1TO << "               \n";
                     std::cout << "speed A2 " << SpeedA2TO << "               \n";
                     std::cout << "speed B1 " << SpeedB1TO << "               \n";
@@ -308,6 +331,35 @@ int main(int argc, char *argv[])
         break;
         case 'T':
         {
+            // QRSCanner myScanner;
+            // std::vector<decodedObject> decodeOB;
+
+            // cv::VideoCapture cap(0);
+
+            // while (true)
+            // {
+            //     int rc;
+            //     rc = lcd1602Init(1, 0x27);
+            //     if (rc)
+            //     {
+            //         printf("Initialization failed; aborting...\n");
+            //         return 0;
+            //     }
+            //     cv::Mat tmpMat;
+            //     cap >> tmpMat;
+
+            //     decodeOB = myScanner.QRCodeDecoder(tmpMat);
+            //     tmpMat = QRSCanner::QRCodeDrawer(decodeOB, tmpMat);
+            //     for (size_t i = 0; i < decodeOB.size(); i++)
+            //     {
+            //         lcd1602WriteString((char)decodeOB[i].data)
+            //                 std::cout
+            //             << decodeOB[i].data << "\n";
+            //     }
+
+            //     imshow("test", tmpMat);
+            //     cv::waitKey(10);
+            // }
         }
         break;
         }
@@ -336,9 +388,9 @@ void configWrite(const char *configDir, const char *Target, double obj)
     configs.close();
 }
 
-void PID_GryoYaw(float &inputData, float &outputData,
-                 float &last_I_Data, float &last_D_Data,
-                 float P_Gain, float I_Gain, float D_Gain, float I_Max)
+void PIDCacl(float &inputData, float &outputData,
+             float &last_I_Data, float &last_D_Data,
+             float P_Gain, float I_Gain, float D_Gain, float I_Max)
 {
     outputData = P_Gain * inputData;
     outputData += D_Gain * (inputData - last_D_Data);
