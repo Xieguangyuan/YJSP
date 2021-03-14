@@ -2,15 +2,16 @@
 #include <unistd.h>
 #include <iomanip>
 #include <nlohmann/json.hpp>
-#include "pca9685.h"
-#include "lcd1602.h"
 #include <fstream>
 #include <wiringPi.h>
-#include "thirdparty/RaspberryPiRC/RPiIBus/RPiIBus.hpp"
-#include "thirdparty/RaspberryPiMPU/src/MPU9250/MPU9250.hpp"
-// #include "thirdparty/QRModule/src/qrscanner.hpp"
 #include <thread>
 #include <opencv2/opencv.hpp>
+
+#include "pca9685.h"
+#include "lcd1602.h"
+#include "thirdparty/RaspberryPiRC/RPiIBus/RPiIBus.hpp"
+#include "thirdparty/RaspberryPiMPU/src/MPU9250/MPU9250.hpp"
+#include "thirdparty/QRModule/src/qrscanner.hpp"
 
 void PIDCacl(float &inputData, float &outputData,
              float &last_I_Data, float &last_D_Data,
@@ -28,7 +29,17 @@ int main(int argc, char *argv[])
     int TimeMax = 0;
     MPUData myData;
     int IbusData[14] = {1500, 1500, 1000, 1500};
-    Ibus myIbusDevice("/dev/ttyAMA0");
+    Ibus myIbusDevice;
+    try
+    {
+        myIbusDevice = Ibus("/dev/ttyAMA0");
+    }
+    catch (const std::string &e)
+    {
+        std::cout << e << "\n";
+        exit(0);
+    }
+
     int fd = pca9685Setup(65, 0x40, 300);
 
     double SPEED_X = 0;
@@ -282,6 +293,20 @@ int main(int argc, char *argv[])
                         pca9685PWMWrite(fd, 1, 0, 0);
                     }
                     usleep(4000);
+                }
+            });
+
+            std::thread CameraThreading = std::thread([&] {
+                cv::VideoCapture cap(0);
+                cv::namedWindow("test", cv::WINDOW_NORMAL);
+                cv::setWindowProperty("test", cv::WND_PROP_FULLSCREEN, cv::WINDOW_FULLSCREEN);
+                while (true)
+                {
+                    cv::Mat TmpMat;
+                    cap.read(TmpMat);
+                    cv::rotate(TmpMat, TmpMat, cv::ROTATE_180);
+                    cv::imshow("test", TmpMat);
+                    cv::waitKey(10);
                 }
             });
 

@@ -10,3 +10,5 @@ add_executable(YJSP main.cpp pca9685.c)
 target_link_libraries(YJSP Ibus)
 target_link_libraries(YJSP ${WIRING})
 target_link_libraries(YJSP RPiMPU)
+target_link_libraries(YJSP qrscanner)
+
