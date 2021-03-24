@@ -6,13 +6,17 @@
 #include <wiringPi.h>
 #include <thread>
 #include <opencv2/opencv.hpp>
+#include <opencv2/highgui.hpp>
+#include "opencv2/imgproc/imgproc.hpp"
 
 #include "pca9685.h"
 #include "lcd1602.h"
 #include "thirdparty/RaspberryPiRC/RPiIBus/RPiIBus.hpp"
 #include "thirdparty/RaspberryPiMPU/src/MPU9250/MPU9250.hpp"
 #include "thirdparty/QRModule/src/qrscanner.hpp"
-
+#include "thirdparty/RuModule/SRC/_VisionBase/CameraDrive/Drive_V4L2Reader.hpp"
+#include "thirdparty/RuModule/SRC/_VisionBase/VisionAIDrive/Drive_OpenCVDN.hpp"
+using namespace cv;
 void PIDCacl(float &inputData, float &outputData,
              float &last_I_Data, float &last_D_Data,
              float P_Gain, float I_Gain, float D_Gain, float I_Max);
@@ -28,7 +32,7 @@ int main(int argc, char *argv[])
     int TimeNext = 0;
     int TimeMax = 0;
     MPUData myData;
-    int IbusData[14] = {1500, 1500, 1000, 1500};
+    int IbusData[14] = {1500, 1500, 1000, 1500, 0, 0, 0, 0, 1500, 0};
     Ibus myIbusDevice;
     try
     {
@@ -39,8 +43,14 @@ int main(int argc, char *argv[])
         std::cout << e << "\n";
         exit(0);
     }
-
-    int fd = pca9685Setup(65, 0x40, 300);
+    // CVInferConfig InferConfigs;
+    // InferConfigs.Confidence_Threshold = 0.7;
+    // InferConfigs.File_args1 = "../thirdparty/RuModule/Data/vino-banketFP16/frozen_inference_graph.xml";
+    // InferConfigs.File_args2 = "../thirdparty/RuModule/Data/vino-banketFP16/frozen_inference_graph.bin";
+    // CVInferEngine MyEngine(InferConfigs);
+    std::vector<decodedObject> decodeOB;
+    int fd = pca9685Setup(65, 0x40, 50);
+    int rc = lcd1602Init(1, 0x27);
 
     double SPEED_X = 0;
     double SPEED_Y = 0;
@@ -196,10 +206,11 @@ int main(int argc, char *argv[])
                     {
                         TotalForward = RCForward;
                         TotalHorizontal = RCHorizontal;
-                        float YawInput = (RCYaw + myData._uORB_Gryo___Yaw * 5);
-                        YawInput = YawInput > 500.f ? 500.f : YawInput;
-                        PIDCacl(YawInput, TotalYaw, PIDYawLastIData,
-                                PIDYawLastDData, PIDYawPGain, PIDYawIGain, PIDYawDGain, 80.f);
+                        TotalYaw = RCYaw;
+                        // float YawInput = (RCYaw + myData._uORB_Gryo___Yaw * 5);
+                        // YawInput = YawInput > 500.f ? 500.f : YawInput;
+                        // PIDCacl(YawInput, TotalYaw, PIDYawLastIData,
+                        //         PIDYawLastDData, PIDYawPGain, PIDYawIGain, PIDYawDGain, 80.f);
                     }
 
                     TimeEnd = micros();
@@ -231,7 +242,625 @@ int main(int argc, char *argv[])
                         RCYaw = IbusData[3] - RCYawMiddle;
                 }
             });
+            std::thread RCservo = std::thread([&] {
+                while (true)
+                {
+                    int RC_data = myIbusDevice.IbusRead(IbusData, 4000, 2);
+                    if (IbusData[6] > 1900)
+                    {
+                        for (int i = 250; i <= 270; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 5, 0, i);
+                        }
+                        for (int i = 400; i >= 300; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        for (int i = 120; i <= 300; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 6, 0, i);
+                        }
+                        for (int i = 300; i >= 140; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        for (int i = 0; i <= 100; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 4, 0, i);
+                        }
 
+                        for (int i = 270; i <= 350; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 5, 0, i);
+                        }
+                        for (int i = 300; i <= 480; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 6, 0, i);
+                        }
+                        for (int i = 140; i <= 230; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        pca9685PWMWrite(fd, 8, 0, 390);
+                        delay(1000);
+                        for (int i = 100; i <= 150; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 4, 0, i);
+                        }
+                        for (int i = 350; i >= 270; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 5, 0, i);
+                        }
+                        for (int i = 230; i <= 300; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        for (int i = 480; i >= 300; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 6, 0, i);
+                        }
+                        pca9685PWMWrite(fd, 8, 0, 410);
+                        for (int i = 300; i <= 400; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        for (int i = 300; i >= 120; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 6, 0, i);
+                        }
+                        for (int i = 270; i >= 250; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 5, 0, i);
+                        }
+                    }
+                    if (IbusData[7] > 1900)
+                    {
+                        for (int i = 250; i <= 270; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 5, 0, i);
+                        }
+                        for (int i = 400; i >= 300; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        for (int i = 120; i <= 300; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 6, 0, i);
+                        }
+                        for (int i = 300; i >= 140; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        for (int i = 0; i <= 100; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 4, 0, i);
+                        }
+
+                        for (int i = 270; i <= 350; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 5, 0, i);
+                        }
+                        for (int i = 300; i <= 400; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 6, 0, i);
+                        }
+                        for (int i = 140; i <= 230; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        for (int i = 410; i >= 360; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 8, 0, i);
+                        }
+                        for (int i = 230; i <= 380; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        for (int i = 400; i >= 90; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 6, 0, i);
+                        }
+                        for (int i = 350; i >= 250; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 5, 0, i);
+                        }
+                        for (int i = 100; i <= 150; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 4, 0, i);
+                        }
+                        for (int i = 250; i <= 380; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 5, 0, i);
+                        }
+                        for (int i = 380; i >= 300; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        for (int i = 90; i <= 300; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 6, 0, i);
+                        }
+                        for (int i = 360; i <= 410; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 8, 0, i);
+                        }
+                        for (int i = 300; i <= 400; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        for (int i = 300; i >= 120; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 6, 0, i);
+                        }
+                        for (int i = 270; i >= 250; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 5, 0, i);
+                        }
+                    }
+                    if (IbusData[9] > 1900)
+                    {
+                        for (int i = 250; i <= 270; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 5, 0, i);
+                        }
+                        for (int i = 400; i >= 300; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        for (int i = 120; i <= 300; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 6, 0, i);
+                        }
+                        for (int i = 300; i >= 140; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        for (int i = 0; i <= 100; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 4, 0, i);
+                        }
+
+                        for (int i = 300; i <= 350; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 5, 0, i);
+                        }
+                        for (int i = 300; i <= 400; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 6, 0, i);
+                        }
+                        for (int i = 140; i <= 330; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        for (int i = 410; i <= 490; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 8, 0, i);
+                        }
+                        for (int i = 400; i >= 120; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 6, 0, i);
+                        }
+                        for (int i = 350; i >= 250; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 5, 0, i);
+                        }
+                        for (int i = 100; i <= 150; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 4, 0, i);
+                        }
+                        for (int i = 250; i <= 270; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 5, 0, i);
+                        }
+                        for (int i = 330; i >= 300; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        for (int i = 120; i <= 300; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 6, 0, i);
+                        }
+                        for (int i = 490; i >= 410; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 8, 0, i);
+                        }
+                        for (int i = 300; i <= 400; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        for (int i = 300; i >= 120; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 6, 0, i);
+                        }
+                        for (int i = 270; i >= 250; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 5, 0, i);
+                        }
+                    }
+                    if (IbusData[4] > 1200)
+                    {
+                        for (int i = 410; i >= 360; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 8, 0, i);
+                        }
+                        for (int i = 400; i >= 370; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        for (int i = 120; i >= 90; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 6, 0, i);
+                        }
+                        for (int i = 270; i >= 250; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 5, 0, i);
+                        }
+
+                        for (int i = 0; i <= 100; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 4, 0, i);
+                        }
+                        delay(1000);
+                        for (int i = 90; i <= 170; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 6, 0, i);
+                        }
+                        for (int i = 250; i <= 270; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 5, 0, i);
+                        }
+                        for (int i = 360; i <= 410; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 8, 0, i);
+                        }
+
+                        for (int i = 270; i <= 360; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 5, 0, i);
+                        }
+                        for (int i = 170; i <= 210; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 6, 0, i);
+                        }
+                        for (int i = 370; i >= 130; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        for (int i = 100; i <= 150; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 4, 0, i);
+                        }
+                        for (int i = 210; i <= 400; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 6, 0, i);
+                        }
+                        for (int i = 130; i <= 300; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        for (int i = 400; i >= 300; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 6, 0, i);
+                        }
+                        for (int i = 360; i >= 270; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 5, 0, i);
+                        }
+                        for (int i = 300; i <= 400; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        for (int i = 300; i >= 120; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 6, 0, i);
+                        }
+                        for (int i = 270; i >= 250; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 5, 0, i);
+                        }
+                    }
+                    if (IbusData[5] > 1200)
+                    {
+                        for (int i = 410; i <= 490; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 8, 0, i);
+                        }
+                        for (int i = 400; i >= 320; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        for (int i = 0; i <= 100; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 4, 0, i);
+                        }
+                        delay(1000);
+                        for (int i = 320; i <= 350; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        for (int i = 250; i <= 380; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 5, 0, i);
+                        }
+                        for (int i = 120; i <= 200; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 6, 0, i);
+                        }
+                        for (int i = 490; i >= 410; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 8, 0, i);
+                        }
+                        for (int i = 350; i >= 130; i--)
+                        {
+                            delay(10);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        for (int i = 100; i <= 150; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 4, 0, i);
+                        }
+
+                        for (int i = 380; i <= 400; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 5, 0, i);
+                        }
+                        for (int i = 200; i <= 400; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 6, 0, i);
+                        }
+                        for (int i = 130; i <= 300; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        delay(1000);
+                        for (int i = 300; i <= 400; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        for (int i = 300; i >= 120; i--)
+                        {
+                            delay(10);
+                            pca9685PWMWrite(fd, 6, 0, i);
+                        }
+                        for (int i = 400; i >= 250; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 5, 0, i);
+                        }
+                    }
+                    if (IbusData[2] > 1900)
+                    {
+                        for (int i = 410; i >= 400; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 8, 0, i);
+                        }
+                        for (int i = 250; i <= 270; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 5, 0, i);
+                        }
+                        for (int i = 400; i >= 300; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        for (int i = 120; i <= 300; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 6, 0, i);
+                        }
+                        for (int i = 300; i >= 220; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        for (int i = 300; i <= 500; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 6, 0, i);
+                        }
+                        for (int i = 270; i <= 320; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 5, 0, i);
+                        }
+                        for (int i = 0; i <= 100; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 4, 0, i);
+                        }
+                        delay(1000);
+                        for (int i = 320; i >= 270; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 5, 0, i);
+                        }
+                        for (int i = 500; i >= 480; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 6, 0, i);
+                        }
+                        for (int i = 400; i <= 410; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 8, 0, i);
+                        }
+                        for (int i = 220; i <= 300; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        for (int i = 380; i >= 200; i--)
+                        {
+                            delay(10);
+                            pca9685PWMWrite(fd, 6, 0, i);
+                        }
+
+                        for (int i = 250; i <= 370; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 5, 0, i);
+                        }
+                        for (int i = 300; i >= 130; i--)
+                        {
+                            delay(10);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        for (int i = 100; i <= 150; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 4, 0, i);
+                        }
+                        for (int i = 370; i <= 400; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 5, 0, i);
+                        }
+                        for (int i = 200; i <= 400; i++)
+                        {
+                            delay(10);
+                            pca9685PWMWrite(fd, 6, 0, i);
+                        }
+                        for (int i = 130; i <= 300; i++)
+                        {
+                            delay(10);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        for (int i = 300; i <= 400; i++)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 7, 0, i);
+                        }
+                        for (int i = 300; i >= 120; i--)
+                        {
+                            delay(10);
+                            pca9685PWMWrite(fd, 6, 0, i);
+                        }
+                        for (int i = 400; i >= 250; i--)
+                        {
+                            delay(5);
+                            pca9685PWMWrite(fd, 5, 0, i);
+                        }
+                    }
+                }
+            });
+            std::thread QRcamer = std::thread([&] {
+                QRSCanner myScanner;
+                //std::vector<decodedObject> decodeOB;
+                // cv::VideoCapture cap(0);
+                V4L2Tools::V4L2Drive cap("/dev/video0", {.ImgWidth = 256,
+                                                         .ImgHeight = 192,
+                                                         .FrameBuffer = 1,
+                                                         .Is_fastMode = true,
+                                                         .PixFormat = V4L2_PIX_FMT_YUYV});
+                cap.V4L2Control(V4L2_CID_ZOOM_ABSOLUTE, 0x8005);
+                usleep(50000);
+                cap.V4L2Control(V4L2_CID_ZOOM_ABSOLUTE, 0x8802);
+                cv::namedWindow("test", cv::WINDOW_NORMAL);
+                cv::setWindowProperty("test", cv::WND_PROP_FULLSCREEN, cv::WINDOW_FULLSCREEN);
+                unsigned char *tmpDataBGR = cap.RGB24DataInit();
+                while (true)
+                {
+                    unsigned char *tmpData = cap.V4L2Read();
+                    cap.yuyv2rgb24(tmpData, tmpDataBGR, 256, 192);
+                    cv::Mat tmpMat = cv::Mat(192, 256, CV_8UC3, tmpDataBGR);
+                    // cap >> tmpMat;
+                    cv::resize(tmpMat, tmpMat, cv::Size(800, 600));
+                    cv::rotate(tmpMat, tmpMat, cv::ROTATE_180);
+
+                    decodeOB = myScanner.QRCodeDecoder(tmpMat);
+                    tmpMat = QRSCanner::QRCodeDrawer(decodeOB, tmpMat);
+
+                    imshow("test", tmpMat);
+                    cv::waitKey(10);
+                }
+            });
             std::thread ESCThreading = std::thread([&] {
                 while (true)
                 {
@@ -296,20 +925,25 @@ int main(int argc, char *argv[])
                 }
             });
 
-            std::thread CameraThreading = std::thread([&] {
-                cv::VideoCapture cap(0);
-                cv::namedWindow("test", cv::WINDOW_NORMAL);
-                cv::setWindowProperty("test", cv::WND_PROP_FULLSCREEN, cv::WINDOW_FULLSCREEN);
-                while (true)
-                {
-                    cv::Mat TmpMat;
-                    cap.read(TmpMat);
-                    cv::rotate(TmpMat, TmpMat, cv::ROTATE_180);
-                    cv::imshow("test", TmpMat);
-                    cv::waitKey(10);
-                }
-            });
+            // std::thread CameraThreading = std::thread([&] {
+            //     cv::VideoCapture cap(0);
+            //     cv::namedWindow("test", cv::WINDOW_NORMAL);
+            //     cv::setWindowProperty("test", cv::WND_PROP_FULLSCREEN, cv::WINDOW_FULLSCREEN);
+            //     while (true)
+            //     {
+            //         cv::Mat TmpMat;
+            //         cap.read(TmpMat);
+            //         TmpMat = MyEngine.CVInferMatSync(TmpMat);
+            //         cv::resize(TmpMat, TmpMat, cv::Size(800, 600));
+            //         cv::rotate(TmpMat, TmpMat, cv::ROTATE_180);
+            //         cv::imshow("test", TmpMat);
+            //         cv::waitKey(10);
+            //     }
+            // });
 
+            std::thread CamerHSV = std::thread([&] {
+
+            });
             std::thread DEBUGThreading = std::thread([&] {
                 while (true)
                 {
@@ -331,8 +965,8 @@ int main(int argc, char *argv[])
                     std::cout << "AccelX    : " << std::setw(7) << std::setfill(' ') << (int)myData._uORB_Acceleration_X << "cm/s2|"
                               << "AccelY    : " << std::setw(7) << std::setfill(' ') << (int)myData._uORB_Acceleration_Y << "cm/s2|"
                               << "AccelZ    : " << std::setw(7) << std::setfill(' ') << (int)myData._uORB_Acceleration_Z << "cm/s2| \n";
-                    std::cout << "SPPED X    : " << std::setw(7) << std::setfill(' ') << SPEED_X << "cm/s|"
-                              << "SPPED Y    : " << std::setw(7) << std::setfill(' ') << SPEED_Y << "cm/s|\n";
+                    std::cout << "SPPED X   : " << std::setw(7) << std::setfill(' ') << SPEED_X << "cm/s|"
+                              << "SPPED Y   : " << std::setw(7) << std::setfill(' ') << SPEED_Y << "cm/s|\n";
 
                     for (int i = 0; i < 10; i++)
                     {
@@ -347,6 +981,11 @@ int main(int argc, char *argv[])
                     std::cout << "speed A2 " << SpeedA2TO << "               \n";
                     std::cout << "speed B1 " << SpeedB1TO << "               \n";
                     std::cout << "speed B2 " << SpeedB2TO << "               \n";
+                    for (size_t i = 0; i < decodeOB.size(); i++)
+                    {
+                        //lcd1602WriteString((char)decodeOB[i].data);
+                        std::cout << "QRSanner:" << decodeOB[i].data << "\n";
+                    }
                     usleep(20000);
                 }
             });
@@ -356,35 +995,64 @@ int main(int argc, char *argv[])
         break;
         case 'T':
         {
-            // QRSCanner myScanner;
-            // std::vector<decodedObject> decodeOB;
+            VideoCapture cap(0);
+            namedWindow("Control", cv::WindowFlags::WINDOW_AUTOSIZE);
 
-            // cv::VideoCapture cap(0);
+            int iLowH = 0;
+            int iHighH = 179;
 
-            // while (true)
-            // {
-            //     int rc;
-            //     rc = lcd1602Init(1, 0x27);
-            //     if (rc)
-            //     {
-            //         printf("Initialization failed; aborting...\n");
-            //         return 0;
-            //     }
-            //     cv::Mat tmpMat;
-            //     cap >> tmpMat;
+            int iLowS = 0;
+            int iHighS = 255;
 
-            //     decodeOB = myScanner.QRCodeDecoder(tmpMat);
-            //     tmpMat = QRSCanner::QRCodeDrawer(decodeOB, tmpMat);
-            //     for (size_t i = 0; i < decodeOB.size(); i++)
-            //     {
-            //         lcd1602WriteString((char)decodeOB[i].data)
-            //                 std::cout
-            //             << decodeOB[i].data << "\n";
-            //     }
+            int iLowV = 0;
+            int iHighV = 255;
 
-            //     imshow("test", tmpMat);
-            //     cv::waitKey(10);
-            // }
+            createTrackbar("LowH", "Control", &iLowH, 179); //Hue (0 - 179)
+            createTrackbar("HighH", "Control", &iHighH, 179);
+
+            createTrackbar("LowS", "Control", &iLowS, 255); //Saturation (0 - 255)
+            createTrackbar("HighS", "Control", &iHighS, 255);
+
+            createTrackbar("LowV", "Control", &iLowV, 255); //Value (0 - 255)
+            createTrackbar("HighV", "Control", &iHighV, 255);
+
+            while (true)
+            {
+                Mat imgOriginal;
+
+                bool bSuccess = cap.read(imgOriginal);
+
+                if (!bSuccess)
+                {
+                    std::cout << "Cannot read a frame from video stream"
+                              << "\n";
+                    break;
+                }
+
+                Mat imgHSV;
+
+                cvtColor(imgOriginal, imgHSV, COLOR_BGR2HSV);
+
+                Mat imgThresholded;
+
+                inRange(imgHSV, Scalar(iLowH, iLowS, iLowV), Scalar(iHighH, iHighS, iHighV), imgThresholded);
+
+                erode(imgThresholded, imgThresholded, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));
+                dilate(imgThresholded, imgThresholded, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));
+
+                dilate(imgThresholded, imgThresholded, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));
+                erode(imgThresholded, imgThresholded, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));
+
+                imshow("Thresholded Image", imgThresholded);
+                imshow("Original", imgOriginal);
+
+                if (waitKey(30) == 27)
+                {
+                    std::cout << "esc key is pressed by user"
+                              << "\n";
+                    break;
+                }
+            }
         }
         break;
         }
