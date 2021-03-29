@@ -40,10 +40,21 @@ void YJSP_AP::YJSP::MPUThreadREG()
             EF.SPEED_Y = EF.SPEED_Y + (SF.myData._uORB_Acceleration_Y * 0.001);
 
             {
-                RF.TotalForward = RF.RCForward;
-                RF.TotalHorizontal = RF.RCHorizontal;
-                // TotalYaw = RCYaw;
-                float YawInput = (RF.RCYaw + SF.myData._uORB_Gryo___Yaw * 5);
+                float YawInput;
+                if (RF.RC_Auto)
+                {
+                    RF.TotalForward = RF.Auto_Forward;
+                    RF.TotalHorizontal = RF.Auto_Horizontal;
+                    YawInput = (RF.Auto_Yaw + SF.myData._uORB_Gryo___Yaw * 5);
+                }
+                else
+                {
+                    RF.TotalForward = RF.RCForward;
+                    RF.TotalHorizontal = RF.RCHorizontal;
+                    // TotalYaw = RCYaw;
+                    YawInput = (RF.RCYaw + SF.myData._uORB_Gryo___Yaw * 5);
+                }
+
                 YawInput = YawInput > 500.f ? 500.f : YawInput;
                 PF.TotalYawIFilter += (YawInput - PF.TotalYawIFilter) * 0.8;
                 PF.TotalYawDFilter += (YawInput - PF.TotalYawDFilter) * 0.915;
@@ -59,6 +70,13 @@ void YJSP_AP::YJSP::MPUThreadREG()
             TF.TimeEnd = micros();
         }
     });
+}
+
+void YJSP_AP::YJSP::UserInput(int Forward, int Horizontal, int Yaw)
+{
+    RF.Auto_Forward = Forward;
+    RF.Auto_Horizontal = Horizontal;
+    RF.Auto_Yaw = Yaw;
 }
 
 void YJSP_AP::YJSP::RCThreadREG()
@@ -85,6 +103,10 @@ void YJSP_AP::YJSP::RCThreadREG()
                 RF.RCARM = true;
             else
                 RF.RCARM = false;
+            if (RF.IbusData[7] > 1700 && RF.IbusData[7] < 2000)
+                RF.RC_Auto = true;
+            else
+                RF.RC_Auto = false;
         }
     });
 }
@@ -98,10 +120,10 @@ void YJSP_AP::YJSP::ESCThreadREG()
             EF.SpeedA2 = RF.TotalForward + RF.TotalHorizontal + RF.TotalYaw;
             EF.SpeedB1 = RF.TotalForward + RF.TotalHorizontal - RF.TotalYaw;
             EF.SpeedB2 = RF.TotalForward - RF.TotalHorizontal + RF.TotalYaw;
-            EF.SpeedA1TO = (EF.SpeedA1 / 500.f) * 3900.f;
-            EF.SpeedA2TO = (EF.SpeedA2 / 500.f) * 3900.f;
-            EF.SpeedB1TO = (EF.SpeedB1 / 500.f) * 3900.f;
-            EF.SpeedB2TO = (EF.SpeedB2 / 500.f) * 3900.f;
+            EF.SpeedA1TO = 100 + (EF.SpeedA1 / 500.f) * 3900.f;
+            EF.SpeedA2TO = 100 + (EF.SpeedA2 / 500.f) * 3900.f;
+            EF.SpeedB1TO = 100 + (EF.SpeedB1 / 500.f) * 3900.f;
+            EF.SpeedB2TO = 100 + (EF.SpeedB2 / 500.f) * 3900.f;
 
             EF.SpeedA1TO = EF.SpeedA1TO > 3900 ? 3900 : EF.SpeedA1TO;
             EF.SpeedA2TO = EF.SpeedA2TO > 3900 ? 3900 : EF.SpeedA2TO;
@@ -201,14 +223,15 @@ void YJSP_AP::YJSP::DEBUGThreadREG()
             std::cout << RF.IbusData[i] << " ";
         }
         std::cout << "\n";
-        std::cout << "RCARM" << RF.RCARM << "           \n";
+        std::cout << "RCAUTO     " << RF.RC_Auto << "           \n";
+        std::cout << "RCARM      " << RF.RCARM << "           \n";
         std::cout << "RCForward: " << RF.TotalForward << "           \n";
-        std::cout << "RCHor: " << RF.TotalHorizontal << "             \n";
-        std::cout << "RCYaw: " << RF.TotalYaw << "                \n";
-        std::cout << "speed A1 " << EF.SpeedA1TO << "               \n";
-        std::cout << "speed A2 " << EF.SpeedA2TO << "               \n";
-        std::cout << "speed B1 " << EF.SpeedB1TO << "               \n";
-        std::cout << "speed B2 " << EF.SpeedB2TO << "               \n";
+        std::cout << "RCHor:     " << RF.TotalHorizontal << "             \n";
+        std::cout << "RCYaw:     " << RF.TotalYaw << "                \n";
+        std::cout << "speed A1   " << EF.SpeedA1TO << "               \n";
+        std::cout << "speed A2   " << EF.SpeedA2TO << "               \n";
+        std::cout << "speed B1   " << EF.SpeedB1TO << "               \n";
+        std::cout << "speed B2   " << EF.SpeedB2TO << "               \n";
 
         usleep(20000);
     }

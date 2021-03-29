@@ -20,6 +20,7 @@ namespace YJSP_AP
         void RCThreadREG();
         void ESCThreadREG();
         void DEBUGThreadREG();
+        void UserInput(int Forward, int Horizontal, int Yaw);
 
     private:
         struct Device
@@ -36,6 +37,7 @@ namespace YJSP_AP
             int IbusData[14] = {1500, 1500, 1000, 1500, 999, 999, 999, 999, 999, 999};
 
             bool RCARM = true;
+            bool RC_Auto = false;
             float TotalForward;
             float TotalHorizontal;
             float TotalYaw;
@@ -52,6 +54,11 @@ namespace YJSP_AP
             int RCYawMax;
             int RCYawMin;
             int RCYawMiddle;
+
+            int Auto_Forward;
+            int Auto_Horizontal;
+            int Auto_Yaw;
+
         } RF;
 
         struct PIDData
