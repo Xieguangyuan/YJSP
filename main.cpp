@@ -9,6 +9,7 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/imgproc/types_c.h>
 #include "YJSP_Schedule.hpp"
+#include "saftyMat.hpp"
 
 #include "pca9685.h"
 #include "lcd1602.h"
@@ -18,6 +19,7 @@
 #include "thirdparty/RuModule/SRC/_VisionBase/VisionAIDrive/Drive_OpenCVDN.hpp"
 using namespace cv;
 double MAX_Area = 0;
+float YawOutput = 0;
 float CXOutput = 0;
 float CXOutputILast = 0;
 float CXOutputDLast = 0;
@@ -31,16 +33,17 @@ void PIDCaclOut(float inputDataP, float inputDataI, float inputDataD, float &out
 int main(int argc, char *argv[])
 {
     wiringPiSetup();
+    pinMode(29, OUTPUT);
     // CVInferConfig InferConfigs;
     // InferConfigs.Confidence_Threshold = 0.8;
     // InferConfigs.File_args1 = "../thirdparty/RuModule/Data/vino-banketFP16/frozen_inference_graph.xml";
     // InferConfigs.File_args2 = "../thirdparty/RuModule/Data/vino-banketFP16/frozen_inference_graph.bin";
     // CVInferEngine MyEngine(InferConfigs);
-    std::vector<decodedObject> decodeOB;
+
     int rc = lcd1602Init(1, 0x27);
     int argvs = 0;
 
-    while ((argvs = getopt(argc, argv, "RTMF")) != -1)
+    while ((argvs = getopt(argc, argv, "RTMFY")) != -1)
     {
         switch (argvs)
         {
@@ -186,9 +189,13 @@ int main(int argc, char *argv[])
         {
             cv::Mat src;
             cv::Mat tmp;
-            cv::Mat tmpMat;
+            cv::Mat QRTmp;
+            FrameBuffer<cv::Mat> syncBuffer;
+
+            std::vector<decodedObject> decodeOB;
             cv::VideoCapture cap(0);
             QRSCanner myScanner;
+
             cv::namedWindow("AICamer", cv::WINDOW_NORMAL);
             cv::setWindowProperty("AICamer", cv::WND_PROP_FULLSCREEN, cv::WINDOW_FULLSCREEN);
 
@@ -204,7 +211,7 @@ int main(int argc, char *argv[])
                     cap >> src;
                     resize(src, src, cv::Size(800, 600));
                     rotate(src, src, cv::ROTATE_180);
-                    tmpMat = src;
+                    syncBuffer.pushFrame(src);
                     cvtColor(src, tmp, CV_BGR2HSV_FULL);
                     inRange(tmp, Scalar(70, 140, 0), Scalar(179, 255, 255), tmp); //Scalar(LOW_H,LOW_S,LOW_V),Scalar(HIGH_H,HIGH_S,HIGH_V)
 
@@ -246,25 +253,53 @@ int main(int argc, char *argv[])
                     }
                     //
                     double CXInput = -1 * (cx - 400);
-                    PIDCaclOut(CXInput, CXInput, CXInput, CXOutput, CXOutputILast, CXOutputDLast, 0.2, 0.05, 3, 100.f);
-                    SPGO.UserInput(CXInput, 0, 0);
-                    //
-                    circle(tmpMat, Point(cx, cy), 10, Scalar(0, 0, 0));
-                    imshow("AICamer", tmpMat);
+                    PIDCaclOut(CXInput, CXInput, CXInput, CXOutput, CXOutputILast, CXOutputDLast, 0.5, 0.07, 5, 100.f);
+                    // UserInput(CXInput, 0, 0);
+                    //SPGO.PWMUserInput(8, 0, CXInput);
+                    circle(src, Point(cx, cy), 10, Scalar(0, 0, 0));
+                    imshow("AICamer", src);
                     cv::waitKey(10);
                 }
             });
 
             std::thread QRDefine = std::thread([&] {
+                sleep(1);
                 while (true)
                 {
-                    if (!tmpMat.empty())
+                    if (syncBuffer.size() > 0)
+                    {
+                        QRTmp = syncBuffer.getFrame();
+                        if (!QRTmp.empty())
+                        {
+                            decodeOB = myScanner.QRCodeDecoder(QRTmp);
+                            QRTmp = QRSCanner::QRCodeDrawer(decodeOB, QRTmp);
+                        }
+                    }
+                    if (syncBuffer.size() > 15)
+                        syncBuffer.clearBuffer();
+                    usleep(200000);
+                }
+            });
+            bool finish = true;
+            bool finishs = true;
+            SPGO.OnRCDataCome([&](auto *RCData) {
+                if (RCData[7] > 1700 && RCData[7] < 2000)
+                {
+                    finish = false;
+                }
+                else
+                {
+                    finish = true;
+                    finishs = true;
+                }
+
+                if (!finish)
+                {
+                    if (finishs)
                     {
 
-                        decodeOB = myScanner.QRCodeDecoder(tmpMat);
-                        tmpMat = QRSCanner::QRCodeDrawer(decodeOB, tmpMat);
+                        finishs = false;
                     }
-                    usleep(200000);
                 }
             });
 
@@ -375,10 +410,16 @@ int main(int argc, char *argv[])
             }
         }
         break;
+        case 'Y':
+        {
+
+            int fd = pca9685Setup(65, 0x40, 50);
+        }
+
+        break;
         }
     }
 }
-
 void PIDCaclOut(float inputDataP, float inputDataI, float inputDataD, float &outputData,
                 float &last_I_Data, float &last_D_Data,
                 float P_Gain, float I_Gain, float D_Gain, float I_Max)

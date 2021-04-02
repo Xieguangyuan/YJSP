@@ -3,6 +3,7 @@
 #include <iomanip>
 #include <nlohmann/json.hpp>
 #include <fstream>
+#include <functional>
 #include <wiringPi.h>
 #include <thread>
 
@@ -20,9 +21,25 @@ namespace YJSP_AP
         void RCThreadREG();
         void ESCThreadREG();
         void DEBUGThreadREG();
-        void UserInput(int Forward, int Horizontal, int Yaw);
+        void UserInput(int Forward, int Horizontal, int Yaw, int Input_Yaw);
+        void PWMUserInput(int pinBase, int on, int off);
+        void Servo_ArmGrab1();
+        void Servo_ArmGrab2();
+        void Servo_ArmGrab3();
+        void Servo_ArmPlace1();
+        void Servo_ArmPlace2();
+        void Servo_ArmPlace3();
+        void Servo_ArmGet1();
+        void Servo_ArmGet2();
+        void Servo_ArmGet3();
+        YJSP_AP::YJSP &&OnRCDataCome(std::function<void(int *)> call_BACK)
+        {
+            OnRCDataInComing = call_BACK;
+        }
 
     private:
+        std::function<void(int *)> OnRCDataInComing;
+
         struct Device
         {
             char RCDeviceInfo[20] = "/dev/ttyAMA0";
@@ -58,6 +75,8 @@ namespace YJSP_AP
             int Auto_Forward;
             int Auto_Horizontal;
             int Auto_Yaw;
+
+            int InputYaw;
 
         } RF;
 
@@ -106,6 +125,7 @@ namespace YJSP_AP
         {
             MPUData myData;
             double AccelCaliData[30];
+            float Real_Yaw = 0;
         } SF;
 
         void PIDCacl(float inputDataP, float inputDataI, float inputDataD, float &outputData,
