@@ -8,6 +8,7 @@
 #include <thread>
 
 #include "pca9685.h"
+#include "VL53L1XFuck.hpp"
 #include "thirdparty/RaspberryPiRC/RPiIBus/RPiIBus.hpp"
 #include "thirdparty/RaspberryPiMPU/src/MPU9250/MPU9250.hpp"
 
@@ -18,6 +19,7 @@ namespace YJSP_AP
     public:
         int YJSP_Init();
         void MPUThreadREG();
+        void PositionThreadREG();
         void RCThreadREG();
         void ESCThreadREG();
         void DEBUGThreadREG();
@@ -45,6 +47,7 @@ namespace YJSP_AP
             char RCDeviceInfo[20] = "/dev/ttyAMA0";
             RPiMPU9250 *MPUDevice;
             Ibus *myIbusDevice;
+            VL53L1XFuck myVL53L1X;
             int fd;
         } DF;
 
@@ -88,12 +91,21 @@ namespace YJSP_AP
             float PIDYawLastIData = 0;
             float PIDYawLastDData = 0;
 
+            float PIDForwardPGain = 0;
+            float PIDForwardIGain = 0;
+            float PIDForwardDGain = 0;
+            float PIDForwardLastIData = 0;
+            float PIDForwardLastDData = 0;
+
             float TotalYawIFilter = 0;
             float TotalYawDFilter = 0;
+            float TotalForwardIFilter = 0;
+            float TotalForwardDFilter = 0;
         } PF;
 
         struct ESCData
         {
+
             double SPEED_X = 0;
             double SPEED_Y = 0;
             double SpeedA1 = 0;
@@ -111,6 +123,7 @@ namespace YJSP_AP
             std::thread RCThreading;
             std::thread MPUThreading;
             std::thread ESCThreading;
+            std::thread PosThreading;
 
             int TimeStart = 0;
             int TimeEnd = 0;
@@ -124,8 +137,18 @@ namespace YJSP_AP
         struct SensorData
         {
             MPUData myData;
+            int speed = 0;
+            int distance = 0;
             double AccelCaliData[30];
             float Real_Yaw = 0;
+
+            float dustVal = 0;
+            double dataEx = 0;
+            double dataFinal = 0;
+            double dataLast = 0;
+            int dataCount = 0;
+            double dataExOut = 0;
+            double dataVar[10] = {0};
         } SF;
 
         void PIDCacl(float inputDataP, float inputDataI, float inputDataD, float &outputData,

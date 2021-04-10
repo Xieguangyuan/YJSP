@@ -13,6 +13,7 @@
 
 #include "pca9685.h"
 #include "lcd1602.h"
+#include "VL53L1XFuck.hpp"
 #include "thirdparty/RuModule/SRC/_Excutable/Drive_Json.hpp"
 #include "thirdparty/QRModule/src/qrscanner.hpp"
 #include "thirdparty/RuModule/SRC/_VisionBase/CameraDrive/Drive_V4L2Reader.hpp"
@@ -55,10 +56,12 @@ int main(int argc, char *argv[])
             while (true)
             {
                 cap >> src;
-                resize(src, src, cv::Size(480, 360));
+                resize(src, src, cv::Size(800, 600));
                 rotate(src, src, cv::ROTATE_180);
-                cvtColor(src, tmp, CV_BGR2HSV_FULL);
-                inRange(tmp, Scalar(70, 140, 0), Scalar(179, 255, 255), tmp); //Scalar(LOW_H,LOW_S,LOW_V),Scalar(HIGH_H,HIGH_S,HIGH_V)
+                cvtColor(src, tmp, COLOR_BGR2HSV);
+                //inRange(tmp, Scalar(90, 160, 0), Scalar(100, 255, 255), tmp); //blue               Scalar(LOW_H,LOW_S,LOW_V),Scalar(HIGH_H,HIGH_S,HIGH_V)
+                //inRange(tmp, Scalar(60, 80, 70), Scalar(90, 140, 255), tmp); //green
+                inRange(tmp, Scalar(150, 160, 0), Scalar(179, 255, 255), tmp); //red
 
                 erode(tmp, tmp, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));    //腐蚀
                 dilate(tmp, tmp, getStructuringElement(MORPH_ELLIPSE, Size(20, 20))); //膨胀
@@ -204,6 +207,7 @@ int main(int argc, char *argv[])
             SPGO.MPUThreadREG();
             SPGO.RCThreadREG();
             SPGO.ESCThreadREG();
+            SPGO.PositionThreadREG();
 
             std::thread QRcamer = std::thread([&] {
                 while (true)
@@ -253,9 +257,11 @@ int main(int argc, char *argv[])
                     }
                     //
                     double CXInput = -1 * (cx - 400);
-                    PIDCaclOut(CXInput, CXInput, CXInput, CXOutput, CXOutputILast, CXOutputDLast, 0.5, 0.07, 5, 100.f);
+                    // PIDCaclOut(CXInput, CXInput, CXInput, CXOutput, CXOutputILast, CXOutputDLast, 0.5, 0.07, 5, 100.f);
+                    PIDCaclOut(CXInput, CXInput, CXInput, CXOutput, CXOutputILast, CXOutputDLast, 0.1, 0, 0, 0);
+
                     // UserInput(CXInput, 0, 0);
-                    //SPGO.PWMUserInput(8, 0, CXInput);
+                    // SPGO.PWMUserInput(8, 0, CXInput);
                     circle(src, Point(cx, cy), 10, Scalar(0, 0, 0));
                     imshow("AICamer", src);
                     cv::waitKey(10);
@@ -395,8 +401,8 @@ int main(int argc, char *argv[])
 
                 inRange(imgHSV, Scalar(iLowH, iLowS, iLowV), Scalar(iHighH, iHighS, iHighV), imgThresholded);
 
-                erode(imgThresholded, imgThresholded, getStructuringElement(MORPH_ELLIPSE, Size(12, 12)));  //腐蚀
-                dilate(imgThresholded, imgThresholded, getStructuringElement(MORPH_ELLIPSE, Size(18, 18))); //膨胀
+                erode(imgThresholded, imgThresholded, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));    //腐蚀
+                dilate(imgThresholded, imgThresholded, getStructuringElement(MORPH_ELLIPSE, Size(20, 20))); //膨胀
 
                 imshow("Thresholded Image", imgThresholded);
                 imshow("Original", imgOriginal);
@@ -412,9 +418,7 @@ int main(int argc, char *argv[])
         break;
         case 'Y':
         {
-
-            int fd = pca9685Setup(65, 0x40, 50);
-        }
+                }
 
         break;
         }

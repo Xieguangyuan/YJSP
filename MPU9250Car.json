@@ -17,7 +17,10 @@
     "_Car_MPU9250_A_Y_Scal": 0.9881785283474065,
     "_Car_MPU9250_A_Z_Cali": -63.5,
     "_Car_MPU9250_A_Z_Scal": 0.9868690519214552,
-    "_Car_PIDYawPGain": 1.2,
+    "_Car_PIDYawPGain": 0.5,
     "_Car_PIDYawIGain": 0.03,
-    "_Car_PIDYawDGain": 20
+    "_Car_PIDYawDGain": 20,
+    "_Car_PIDForwardPGain": 10.0,
+    "_Car_PIDForwardIGain": 0,
+    "_Car_PIDForwardDGain": 0
 }

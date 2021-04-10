@@ -5,6 +5,8 @@ int YJSP_AP::YJSP::YJSP_Init()
     DF.fd = pca9685Setup(65, 0x40, 50);
     DF.myIbusDevice = new Ibus(DF.RCDeviceInfo);
     DF.MPUDevice = new RPiMPU9250(1, false, 1, 0x68, TF.TimeMax, 0);
+    DF.myVL53L1X.begin(0x29);
+    DF.myVL53L1X.Setmode('L');
     SF.AccelCaliData[MPUAccelCaliX] = configSettle("../MPU9250Car.json", "_Car_MPU9250_A_X_Cali");
     SF.AccelCaliData[MPUAccelCaliY] = configSettle("../MPU9250Car.json", "_Car_MPU9250_A_Y_Cali");
     SF.AccelCaliData[MPUAccelCaliZ] = configSettle("../MPU9250Car.json", "_Car_MPU9250_A_Z_Cali");
@@ -14,6 +16,9 @@ int YJSP_AP::YJSP::YJSP_Init()
     PF.PIDYawPGain = configSettle("../MPU9250Car.json", "_Car_PIDYawPGain");
     PF.PIDYawIGain = configSettle("../MPU9250Car.json", "_Car_PIDYawIGain");
     PF.PIDYawDGain = configSettle("../MPU9250Car.json", "_Car_PIDYawDGain");
+    PF.PIDForwardPGain = configSettle("../MPU9250Car.json", "_Car_PIDForwardPGain");
+    PF.PIDForwardIGain = configSettle("../MPU9250Car.json", "_Car_PIDForwardIGain");
+    PF.PIDForwardDGain = configSettle("../MPU9250Car.json", "_Car_PIDForwardDGain");
     DF.MPUDevice->MPUCalibration(SF.AccelCaliData);
     DF.MPUDevice->MPUSensorsDataGet();
     DF.MPUDevice->ResetMPUMixAngle();
@@ -37,11 +42,14 @@ void YJSP_AP::YJSP::MPUThreadREG()
             TF.TimeNext = TF.TimeStart - TF.TimeEnd;
             SF.myData = DF.MPUDevice->MPUSensorsDataGet();
             SF.Real_Yaw += ((float)SF.myData._uORB_MPU9250_G_Z / 65.5) / (float)TF.TimeMax;
-            EF.SPEED_X = EF.SPEED_X + (SF.myData._uORB_Acceleration_X * 0.001);
-            EF.SPEED_Y = EF.SPEED_Y + (SF.myData._uORB_Acceleration_Y * 0.001);
+            EF.SPEED_X = EF.SPEED_X + (int)SF.myData._uORB_Acceleration_X * (TF.TimeMax / 1000000.f);
+            EF.SPEED_Y = EF.SPEED_Y + (int)SF.myData._uORB_Acceleration_Y * (TF.TimeMax / 1000000.f);
+            EF.SPEED_X = EF.SPEED_X * 0.985 + (SF.speed / 10.f) * (1.f - 0.985);
 
             {
                 float YawInput;
+                float ForInput;
+
                 if (RF.RC_Auto)
                 {
                     RF.TotalForward = RF.Auto_Forward;
@@ -50,17 +58,19 @@ void YJSP_AP::YJSP::MPUThreadREG()
                 }
                 else
                 {
-                    RF.TotalForward = RF.RCForward;
+                    ForInput = EF.SPEED_X - (RF.RCForward / 500.f) * 100.f;
                     RF.TotalHorizontal = RF.RCHorizontal;
-                    // RF.TotalYaw = RF.RCYaw;
                     YawInput = (RF.RCYaw + SF.myData._uORB_Gryo___Yaw * 5);
                 }
 
                 YawInput = YawInput > 500.f ? 500.f : YawInput;
-                PF.TotalYawIFilter += (YawInput - PF.TotalYawIFilter) * 0.8;
-                PF.TotalYawDFilter += (YawInput - PF.TotalYawDFilter) * 0.915;
+                PF.TotalYawIFilter += (YawInput - PF.TotalYawIFilter) * 0.92;
+                PF.TotalYawDFilter += (YawInput - PF.TotalYawDFilter) * 0.985;
                 PIDCacl(YawInput, PF.TotalYawIFilter, PF.TotalYawDFilter, RF.TotalYaw, PF.PIDYawLastIData,
                         PF.PIDYawLastDData, PF.PIDYawPGain, PF.PIDYawIGain, PF.PIDYawDGain, 300.f);
+
+                PIDCacl(ForInput, ForInput, ForInput, RF.TotalForward, PF.PIDForwardLastIData,
+                        PF.PIDForwardLastDData, PF.PIDForwardPGain, PF.PIDForwardIGain, PF.PIDForwardDGain, 200.f);
             }
 
             TF.TimeEnd = micros();
@@ -69,6 +79,28 @@ void YJSP_AP::YJSP::MPUThreadREG()
             else
                 usleep(TF.TimeMax - (TF.TimeEnd - TF.TimeStart) - TF.TimeNext);
             TF.TimeEnd = micros();
+        }
+    });
+}
+
+void YJSP_AP::YJSP::PositionThreadREG()
+{
+    TF.PosThreading = std::thread([&] {
+        DF.myVL53L1X.startMeasurement(0);
+        while (true)
+        {
+            if (DF.myVL53L1X.newDataReady())
+            {
+                SF.distance = (DF.myVL53L1X.getDistance() / 10.f);
+                if (SF.distance <= 0)
+                {
+                    SF.distance = SF.dataLast;
+                }
+                SF.speed = (SF.distance - SF.dataLast) / (100000.f / 1000000.f);
+                SF.dataLast = SF.distance;
+                DF.myVL53L1X.startMeasurement(0);
+            }
+            usleep(5);
         }
     });
 }
@@ -224,8 +256,10 @@ void YJSP_AP::YJSP::DEBUGThreadREG()
                   << "AccelY    : " << std::setw(7) << std::setfill(' ') << (int)SF.myData._uORB_Acceleration_Y << "cm/s2|"
                   << "AccelZ    : " << std::setw(7) << std::setfill(' ') << (int)SF.myData._uORB_Acceleration_Z << "cm/s2| \n";
         std::cout << "Real_Yaw: " << std::setw(7) << std::setfill(' ') << (int)SF.Real_Yaw << "\n";
-        std::cout << "SPPED X   : " << std::setw(7) << std::setfill(' ') << EF.SPEED_X << "cm/s|"
-                  << "SPPED Y   : " << std::setw(7) << std::setfill(' ') << EF.SPEED_Y << "cm/s|\n";
+        std::cout << "SPPED X   : " << std::setw(7) << std::setfill(' ') << (int)EF.SPEED_X << "cm/s|"
+                  << "SPPED Y   : " << std::setw(7) << std::setfill(' ') << (int)EF.SPEED_Y << "cm/s|\n";
+        std::cout << "SPEED     : " << std::setw(7) << std::setfill(' ') << (int)(SF.speed / 10) << "cm/s|\n";
+        std::cout << "Distance  : " << std::setw(7) << std::setfill(' ') << SF.distance << "mm\n";
 
         for (int i = 0; i < 10; i++)
         {
