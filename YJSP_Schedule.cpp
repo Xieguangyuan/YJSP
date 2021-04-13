@@ -70,21 +70,21 @@ void YJSP_AP::YJSP::MPUThreadREG()
                 }
                 else
                 {
+                    RF.TotalForward = RF.RCForward;
+                    RF.TotalHorizontal = RF.RCHorizontal;
                     // ForInput = EF.SPEED_X_EKF - (RF.RCForward / 500.f) * 500.f;
-                    ForInput = EF.SPEED_X_EKF;
                     // HorInput = EF.SPEED_Y - (RF.RCHorizontal / 500.f) * 200.f;
-                    // YawInput = (RF.RCYaw + SF.myData._uORB_Gryo___Yaw);
+                    YawInput = (RF.RCYaw + SF.myData._uORB_Gryo___Yaw * 5);
                 }
-                // PF.TotalYawIFilter += (YawInput - PF.TotalYawIFilter) * 0.92;
-                // PF.TotalYawDFilter += (YawInput - PF.TotalYawDFilter) * 0.985;
-                RF.TotalYaw = 0;
-                // PIDCacl(YawInput, PF.TotalYawIFilter, PF.TotalYawDFilter, RF.TotalYaw, PF.PIDYawLastIData,
-                //         PF.PIDYawLastDData, PF.PIDYawPGain, PF.PIDYawIGain, PF.PIDYawDGain, 500.f);
+                PF.TotalYawIFilter += (YawInput - PF.TotalYawIFilter) * 0.92;
+                PF.TotalYawDFilter += (YawInput - PF.TotalYawDFilter) * 0.985;
 
-                PIDCacl(ForInput, ForInput, ForInput, RF.TotalForward, PF.PIDForwardLastIData,
-                        PF.PIDForwardLastDData, PF.PIDForwardPGain, PF.PIDForwardIGain, PF.PIDForwardDGain, 500.f);
+                PIDCacl(YawInput, PF.TotalYawIFilter, PF.TotalYawDFilter, RF.TotalYaw, PF.PIDYawLastIData,
+                        PF.PIDYawLastDData, PF.PIDYawPGain, PF.PIDYawIGain, PF.PIDYawDGain, 300.f);
 
-                RF.TotalHorizontal = 0;
+                // PIDCacl(ForInput, ForInput, ForInput, RF.TotalForward, PF.PIDForwardLastIData,
+                //         PF.PIDForwardLastDData, PF.PIDForwardPGain, PF.PIDForwardIGain, PF.PIDForwardDGain, 500.f);
+
                 // PIDCacl(HorInput, HorInput, HorInput, RF.TotalHorizontal, PF.PIDHorLastIData,
                 //         PF.PIDHorLastDData, PF.PIDHorPGain, PF.PIDHorIGain, PF.PIDHorDGain, 100.f);
             }
