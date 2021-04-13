@@ -443,7 +443,35 @@ int main(int argc, char *argv[])
         break;
         case 'Y':
         {
+            int Last = 0;
+            int now = 0;
+            int nowL = 0;
+            double speed = 0.f;
+            int stime = 0;
+            int etime = 0;
+            VL53L1XFuck Test;
+            Test.begin("/dev/i2c-1", 0x29);
+            while (true)
+            {
+                stime = micros();
+                if (Test.newDataReady())
+                {
+                    now = (int)(Test.getDistance() / 10.f);
+                    nowL = nowL * 0.7 + now * 0.3;
+                    speed = (nowL - Last) / (100000.f / 1000000.f);
+                    std::cout << nowL << " ";
+                    std::cout << speed << " ";
+                    std::cout << etime - stime << " \n";
+                    Last = nowL;
+                }
+                Test.startMeasurement(0);
 
+                etime = micros();
+                if (100000.f < (etime - stime))
+                    usleep(50);
+                else
+                    usleep(100000.f - (etime - stime));
+            }
             break;
         }
         }
