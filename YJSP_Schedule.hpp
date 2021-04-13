@@ -11,6 +11,7 @@
 #include "VL53L1XFuck.hpp"
 #include "thirdparty/RaspberryPiRC/RPiIBus/RPiIBus.hpp"
 #include "thirdparty/RaspberryPiMPU/src/MPU9250/MPU9250.hpp"
+#include "thirdparty/KalmanIMP.hpp"
 
 namespace YJSP_AP
 {
@@ -45,9 +46,11 @@ namespace YJSP_AP
         struct Device
         {
             char RCDeviceInfo[20] = "/dev/ttyAMA0";
+            TotalEKF EKFIMS;
             RPiMPU9250 *MPUDevice;
             Ibus *myIbusDevice;
             VL53L1XFuck myVL53L1X;
+            VL53L1XFuck MYVL53L1X;
             int fd;
         } DF;
 
@@ -97,16 +100,25 @@ namespace YJSP_AP
             float PIDForwardLastIData = 0;
             float PIDForwardLastDData = 0;
 
+            float PIDHorPGain = 0;
+            float PIDHorIGain = 0;
+            float PIDHorDGain = 0;
+            float PIDHorLastIData = 0;
+            float PIDHorLastDData = 0;
+
             float TotalYawIFilter = 0;
             float TotalYawDFilter = 0;
             float TotalForwardIFilter = 0;
             float TotalForwardDFilter = 0;
+            float TotalHorIFilter = 0;
+            float TotalHorDFilter = 0;
         } PF;
 
         struct ESCData
         {
 
             double SPEED_X = 0;
+            double SPEED_X_EKF = 0;
             double SPEED_Y = 0;
             double SpeedA1 = 0;
             double SpeedA2 = 0;
@@ -124,6 +136,7 @@ namespace YJSP_AP
             std::thread MPUThreading;
             std::thread ESCThreading;
             std::thread PosThreading;
+            std::thread NewPosThreading;
 
             int TimeStart = 0;
             int TimeEnd = 0;
@@ -137,8 +150,10 @@ namespace YJSP_AP
         struct SensorData
         {
             MPUData myData;
-            int speed = 0;
-            int distance = 0;
+            int speed_x = 0;
+            int speed_y = 0;
+            int distance_X = 0;
+            int distance_Y = 0;
             double AccelCaliData[30];
             float Real_Yaw = 0;
 

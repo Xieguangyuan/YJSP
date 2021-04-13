@@ -10,3 +10,6 @@
 [submodule "thirdparty/RuModule"]
 	path = thirdparty/RuModule
 	url = https://github.com/TSKangetsu/Ru_APM
+[submodule "thirdparty/EKFImp"]
+	path = thirdparty/EKFImp
+	url = https://github.com/simondlevy/TinyEKF

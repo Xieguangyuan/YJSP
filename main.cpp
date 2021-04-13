@@ -217,7 +217,7 @@ int main(int argc, char *argv[])
                     rotate(src, src, cv::ROTATE_180);
                     syncBuffer.pushFrame(src);
                     cvtColor(src, tmp, CV_BGR2HSV_FULL);
-                    inRange(tmp, Scalar(70, 140, 0), Scalar(179, 255, 255), tmp); //Scalar(LOW_H,LOW_S,LOW_V),Scalar(HIGH_H,HIGH_S,HIGH_V)
+                    inRange(tmp, Scalar(150, 160, 0), Scalar(179, 255, 255), tmp); //red //Scalar(LOW_H,LOW_S,LOW_V),Scalar(HIGH_H,HIGH_S,HIGH_V)
 
                     erode(tmp, tmp, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));    //腐蚀
                     dilate(tmp, tmp, getStructuringElement(MORPH_ELLIPSE, Size(20, 20))); //膨胀
@@ -258,7 +258,7 @@ int main(int argc, char *argv[])
                     //
                     double CXInput = -1 * (cx - 400);
                     // PIDCaclOut(CXInput, CXInput, CXInput, CXOutput, CXOutputILast, CXOutputDLast, 0.5, 0.07, 5, 100.f);
-                    PIDCaclOut(CXInput, CXInput, CXInput, CXOutput, CXOutputILast, CXOutputDLast, 0.1, 0, 0, 0);
+                    //PIDCaclOut(CXInput, CXInput, CXInput, CXOutput, CXOutputILast, CXOutputDLast, 0.1, 0, 0, 0);
 
                     // UserInput(CXInput, 0, 0);
                     // SPGO.PWMUserInput(8, 0, CXInput);
@@ -303,6 +303,31 @@ int main(int argc, char *argv[])
                 {
                     if (finishs)
                     {
+
+                        for (int i = 400; i <= 460; i++)
+                        {
+                            delay(10);
+                            SPGO.PWMUserInput(4, 0, i);
+                        }
+                        for (int i = 460; i >= 400; i--)
+                        {
+                            delay(10);
+                            SPGO.PWMUserInput(4, 0, i);
+                        }
+                        for (int i = 400; i >= 350; i--)
+                        {
+                            delay(10);
+                            SPGO.PWMUserInput(4, 0, i);
+                        }
+                        for (int i = 350; i <= 400; i++)
+                        {
+                            delay(10);
+                            SPGO.PWMUserInput(4, 0, i);
+                        }
+                        delay(1000);
+                        SPGO.UserInput(200, 0, 0, 0);
+                        delay(300);
+                        SPGO.UserInput(0, 0, 0, 0);
 
                         finishs = false;
                     }
@@ -418,9 +443,9 @@ int main(int argc, char *argv[])
         break;
         case 'Y':
         {
-                }
 
-        break;
+            break;
+        }
         }
     }
 }

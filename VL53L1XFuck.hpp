@@ -12,11 +12,13 @@
 class VL53L1XFuck
 {
 public:
-    bool begin(uint8_t deviceAddress)
+    bool begin(char *i2cdev, uint8_t deviceAddress)
     {
         _deviceAddress = deviceAddress; //If provided, store the I2C address from user
                                         // i2c_port = i2cInit();
-        char *filename = (char *)"/dev/i2c-1";
+
+        char *filename = i2cdev;
+        //char *filename = (char *)"/dev/i2c-1";
         if ((i2c_port = open(filename, O_RDWR)) < 0)
         {
             return false;
