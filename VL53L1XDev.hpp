@@ -9,51 +9,34 @@
 #include <stdint.h>
 #define byte uint8_t
 
-class VL53L1XFuck
+class VL53L1XDevice
 {
 public:
     bool begin(char *i2cdev, uint8_t deviceAddress)
     {
-        _deviceAddress = deviceAddress; //If provided, store the I2C address from user
-                                        // i2c_port = i2cInit();
-
+        _deviceAddress = deviceAddress;
         char *filename = i2cdev;
-        //char *filename = (char *)"/dev/i2c-1";
         if ((i2c_port = open(filename, O_RDWR)) < 0)
-        {
             return false;
-        }
-
-        int addr = _deviceAddress; //<<<<<The I2C address of the slave
+        int addr = _deviceAddress;
         if (ioctl(i2c_port, I2C_SLAVE, addr) < 0)
-        {
             return false;
-        }
-
-        //Check the device ID
-        // uint16_t modelID = readRegister16(VL53L1_IDENTIFICATION__MODEL_ID);
-
-        //cout << modelID << endl;
-        // if (modelID != 0xEACC)
-        //     return (false);
-
+        uint16_t modelID = readRegister16(VL53L1_IDENTIFICATION__MODEL_ID);
+        std::cout << (int)modelID << "\n";
+        if (modelID != 0xEACC)
+            return (false);
         // softReset();
-
-        //Polls the bit 0 of the FIRMWARE__SYSTEM_STATUS register to see if the firmware is ready
         // int counter = 0;
         // while (readRegister16(VL53L1_FIRMWARE__SYSTEM_STATUS) & 0x01 == 0)
         // {
         //     if (counter++ == 100)
-        //         return (false); //Sensor timed out
+        //         return (false);
         //     usleep(10);
         // }
-
-        //Set I2C to 2.8V mode. In this mode 3.3V I2C is allowed.
         // uint16_t result = readRegister16(VL53L1_PAD_I2C_HV__EXTSUP_CONFIG);
         // result = (result & 0xFE) | 0x01;
         // writeRegister16(VL53L1_PAD_I2C_HV__EXTSUP_CONFIG, result);
-
-        return (true); //Sensor online!
+        return (true);
     }
 
     bool Setmode(char mode)
@@ -141,38 +124,29 @@ public:
     }
 
     bool newDataReady()
-    { //cout << "before data ready " << endl;
+    {
         uint16_t result;
         result = readRegister(VL53L1_GPIO__TIO_HV_STATUS);
-
-        //cout << result << endl;
-        //result =readRegister16(VL53L1_IDENTIFICATION__MODEL_ID);
-        //cout << result << endl;
         if (readRegister(VL53L1_GPIO__TIO_HV_STATUS) != 0x03)
-            return (true); //New measurement!
-                           // cout << "after data ready" << endl;
-        return (false);    //No new data
+            return (true);
+        return (false);
     }
 
     void softReset()
     {
-        writeRegister(VL53L1_SOFT_RESET, 0x00); //Reset
-        usleep(1);                              //Driver uses 100us
-        writeRegister(VL53L1_SOFT_RESET, 0x01); //Exit reset
+        writeRegister(VL53L1_SOFT_RESET, 0x00);
+        usleep(1);
+        writeRegister(VL53L1_SOFT_RESET, 0x01);
     }
 
     uint16_t getDistance()
     {
         return (readRegister16(VL53L1_RESULT__FINAL_CROSSTALK_CORRECTED_RANGE_MM_SD0));
-        //return readRegister16(VL53L1_IDENTIFICATION__MODEL_ID);
-        //   return 100;
     }
 
     uint16_t getSignalRate()
     {
-        //From vl53l1_api.c line 2041
         uint16_t reading = readRegister16(VL53L1_RESULT__PEAK_SIGNAL_COUNT_RATE_CROSSTALK_CORRECTED_MCPS_SD0); // << 9; //FIXPOINT97TOFIXPOINT1616
-        //float signalRate = (float)reading/65536.0;
         return (reading);
     }
 
@@ -258,7 +232,7 @@ public:
         return measurementStatus;
     }
 
-    ~VL53L1XFuck()
+    ~VL53L1XDevice()
     {
         close(i2c_port);
     }

@@ -8,7 +8,7 @@
 #include <thread>
 
 #include "pca9685.h"
-#include "VL53L1XFuck.hpp"
+#include "VL53L1XDev.hpp"
 #include "thirdparty/RaspberryPiRC/RPiIBus/RPiIBus.hpp"
 #include "thirdparty/RaspberryPiMPU/src/MPU9250/MPU9250.hpp"
 #include "thirdparty/KalmanIMP.hpp"
@@ -49,8 +49,8 @@ namespace YJSP_AP
             TotalEKF EKFIMS;
             RPiMPU9250 *MPUDevice;
             Ibus *myIbusDevice;
-            VL53L1XFuck myVL53L1X;
-            VL53L1XFuck MYVL53L1X;
+            VL53L1XDevice myVL53L1X;
+            VL53L1XDevice MYVL53L1X;
             int fd;
         } DF;
 
