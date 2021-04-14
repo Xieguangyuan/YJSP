@@ -13,7 +13,7 @@
 
 #include "pca9685.h"
 #include "lcd1602.h"
-#include "VL53L1XFuck.hpp"
+#include "VL53L1XDev.hpp"
 #include "thirdparty/RuModule/SRC/_Excutable/Drive_Json.hpp"
 #include "thirdparty/QRModule/src/qrscanner.hpp"
 #include "thirdparty/RuModule/SRC/_VisionBase/CameraDrive/Drive_V4L2Reader.hpp"
@@ -449,8 +449,12 @@ int main(int argc, char *argv[])
             double speed = 0.f;
             int stime = 0;
             int etime = 0;
-            VL53L1XFuck Test;
+            VL53L1XDevice Test;
             Test.begin("/dev/i2c-1", 0x29);
+            Test.writeRegister(VL53L1_I2C_SLAVE__DEVICE_ADDRESS, 0x33);
+            Test.~VL53L1XDevice();
+            sleep(2);
+            Test.begin("/dev/i2c-1", 0x33);
             while (true)
             {
                 stime = micros();
@@ -464,7 +468,6 @@ int main(int argc, char *argv[])
                     std::cout << etime - stime << " \n";
                     Last = nowL;
                 }
-                Test.startMeasurement(0);
 
                 etime = micros();
                 if (100000.f < (etime - stime))
