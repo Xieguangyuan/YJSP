@@ -5,10 +5,6 @@ int YJSP_AP::YJSP::YJSP_Init()
     DF.fd = pca9685Setup(65, 0x40, 50);
     DF.myIbusDevice = new Ibus(DF.RCDeviceInfo);
     DF.MPUDevice = new RPiMPU9250(1, false, 1, 0x68, TF.TimeMax, 0);
-    DF.myVL53L1X.begin("/dev/i2c-1", 0x29);
-    DF.MYVL53L1X.begin("/dev/i2c-0", 0x29);
-    DF.myVL53L1X.Setmode('L');
-    DF.MYVL53L1X.Setmode('L');
     SF.AccelCaliData[MPUAccelCaliX] = configSettle("../MPU9250Car.json", "_Car_MPU9250_A_X_Cali");
     SF.AccelCaliData[MPUAccelCaliY] = configSettle("../MPU9250Car.json", "_Car_MPU9250_A_Y_Cali");
     SF.AccelCaliData[MPUAccelCaliZ] = configSettle("../MPU9250Car.json", "_Car_MPU9250_A_Z_Cali");
@@ -49,44 +45,36 @@ void YJSP_AP::YJSP::MPUThreadREG()
             SF.Real_Yaw += ((float)SF.myData._uORB_MPU9250_G_Z / 65.5) / (float)TF.TimeMax;
             EF.SPEED_X = EF.SPEED_X + (int)SF.myData._uORB_Acceleration_X * (TF.TimeMax / 1000000.f);
             EF.SPEED_Y = EF.SPEED_Y + (int)SF.myData._uORB_Acceleration_Y * (TF.TimeMax / 1000000.f);
-            EF.SPEED_X = EF.SPEED_X * 0.985 + (EF.SPEED_X_EKF) * (1.f - 0.985);
-            EF.SPEED_Y = EF.SPEED_Y * 0.985 + (EF.SPEED_Y) * (1.f - 0.985);
-
-            double EKFInput[2] = {EF.SPEED_X, (double)SF.speed_x};
-
-            DF.EKFIMS.step(EKFInput);
-            EF.SPEED_X_EKF = DF.EKFIMS.getX(0);
-
+            EF.SPEED_X = EF.SPEED_X * 0.995 + (SF.speed_x) * (1.f - 0.995);
+            EF.SPEED_Y = EF.SPEED_Y * 0.995 + (SF.speed_y) * (1.f - 0.995);
             {
-                float YawInput;
-                float ForInput;
-                float HorInput;
-
                 if (RF.RC_Auto)
                 {
-                    RF.TotalForward = RF.Auto_Forward;
-                    RF.TotalHorizontal = RF.Auto_Horizontal;
-                    YawInput = (RF.Auto_Yaw + SF.myData._uORB_Gryo___Yaw) + SF.Real_Yaw * 15.f - RF.InputYaw * 15.f;
+                    if (PF.IsPositionDisable)
+                    {
+                        PF.UserTargetPostionX = SF.distance_X;
+                        PF.UserTargetPostionY = SF.distance_Y;
+                    }
+                    PF.ForInput = (EF.SPEED_X - RF.Auto_Forward) + (SF.distance_X - PF.UserTargetPostionX) * 8.f;
+                    PF.HorInput = (EF.SPEED_Y - RF.Auto_Horizontal) + (SF.distance_Y - PF.UserTargetPostionY) * 8.f;
+                    PF.YawInput = (RF.Auto_Yaw + SF.myData._uORB_Gryo___Yaw) + SF.Real_Yaw * 15.f - RF.InputYaw * 15.f;
                 }
                 else
                 {
-                    RF.TotalForward = RF.RCForward;
-                    RF.TotalHorizontal = RF.RCHorizontal;
-                    // ForInput = EF.SPEED_X_EKF - (RF.RCForward / 500.f) * 500.f;
-                    // HorInput = EF.SPEED_Y - (RF.RCHorizontal / 500.f) * 200.f;
-                    YawInput = (RF.RCYaw + SF.myData._uORB_Gryo___Yaw * 5);
+                    PF.UserTargetPostionX = SF.distance_X;
+                    PF.UserTargetPostionY = SF.distance_Y;
+                    PF.ForInput = EF.SPEED_X - (RF.RCForward / 500.f) * 500.f;
+                    PF.HorInput = EF.SPEED_Y - (RF.RCHorizontal / 500.f) * 500.f;
+                    PF.YawInput = (RF.RCYaw + SF.myData._uORB_Gryo___Yaw);
                 }
-                PF.TotalYawIFilter += (YawInput - PF.TotalYawIFilter) * 0.92;
-                PF.TotalYawDFilter += (YawInput - PF.TotalYawDFilter) * 0.985;
-
-                PIDCacl(YawInput, PF.TotalYawIFilter, PF.TotalYawDFilter, RF.TotalYaw, PF.PIDYawLastIData,
+                PIDCacl(PF.YawInput, PF.YawInput, PF.YawInput, RF.TotalYaw, PF.PIDYawLastIData,
                         PF.PIDYawLastDData, PF.PIDYawPGain, PF.PIDYawIGain, PF.PIDYawDGain, 300.f);
 
-                // PIDCacl(ForInput, ForInput, ForInput, RF.TotalForward, PF.PIDForwardLastIData,
-                //         PF.PIDForwardLastDData, PF.PIDForwardPGain, PF.PIDForwardIGain, PF.PIDForwardDGain, 500.f);
+                PIDCacl(PF.ForInput, PF.ForInput, PF.ForInput, RF.TotalForward, PF.PIDForwardLastIData,
+                        PF.PIDForwardLastDData, PF.PIDForwardPGain, PF.PIDForwardIGain, PF.PIDForwardDGain, 300.f);
 
-                // PIDCacl(HorInput, HorInput, HorInput, RF.TotalHorizontal, PF.PIDHorLastIData,
-                //         PF.PIDHorLastDData, PF.PIDHorPGain, PF.PIDHorIGain, PF.PIDHorDGain, 100.f);
+                PIDCacl(PF.HorInput, PF.HorInput, PF.HorInput, RF.TotalHorizontal, PF.PIDHorLastIData,
+                        PF.PIDHorLastDData, PF.PIDHorPGain, PF.PIDHorIGain, PF.PIDHorDGain, 300.f);
             }
 
             EF.SpeedA1 = RF.TotalForward + RF.TotalHorizontal - RF.TotalYaw;
@@ -116,58 +104,84 @@ void YJSP_AP::YJSP::MPUThreadREG()
 void YJSP_AP::YJSP::PositionThreadREG()
 {
     TF.PosThreading = std::thread([&] {
-        int timeStart;
-        int timeEnd;
-        DF.myVL53L1X.startMeasurement(0);
+        int Last = 0;
+        int now = 0;
+        int nowL = 0;
+        SF.speed_x = 0.f;
+        int stime = 0;
+        int etime = 0;
+        VL53L1XDevice Testx;
+        //Testx.begin("/dev/i2c-1", 0x29);
+        Testx.startMeasurement(0);
+        // Testx.writeRegister(VL53L1_I2C_SLAVE__DEVICE_ADDRESS, 0x33);
+        // Testx.~VL53L1XDevice();
+        //sleep(2);
+        Testx.begin("/dev/i2c-1", 0x33);
         while (true)
         {
-            if (DF.myVL53L1X.newDataReady())
+            stime = micros();
+            if (Testx.newDataReady())
             {
-                timeStart = micros();
-                SF.dataLast = SF.distance_X;
-                SF.distance_X = (DF.myVL53L1X.getDistance() / 10.f);
-                if (SF.distance_X < 0)
-                {
-                    SF.distance_X = SF.dataLast;
-                }
-                SF.speed_x = (SF.distance_X - SF.dataLast) / ((timeStart - timeEnd) / 1000000.f);
-                DF.myVL53L1X.startMeasurement(0);
-                timeEnd = micros();
+                now = (int)(Testx.getDistance() / 10.f);
+                SF.distance_X = (int)(Testx.getDistance() / 10.f);
+                nowL = nowL * 0.7 + now * 0.3;
+                SF.speed_x = (nowL - Last) / (100000.f / 1000000.f);
+                Last = nowL;
             }
-            usleep(10000);
+
+            etime = micros();
+            if (100000.f < (etime - stime))
+                usleep(50);
+            else
+                usleep(100000.f - (etime - stime));
         }
     });
 
     TF.NewPosThreading = std::thread([&] {
-        int timeStart;
-        int timeEnd;
-        DF.MYVL53L1X.startMeasurement(0);
+        int Last = 0;
+        int now = 0;
+        int nowL = 0;
+        SF.speed_y = 0.f;
+        int stime = 0;
+        int etime = 0;
+        VL53L1XDevice Testy;
+        Testy.begin("/dev/i2c-1", 0x29);
+        Testy.startMeasurement(0);
         while (true)
         {
-            if (DF.MYVL53L1X.newDataReady())
+            stime = micros();
+            if (Testy.newDataReady())
             {
-                timeStart = micros();
-                SF.dataLast = SF.distance_Y;
-                SF.distance_Y = (DF.MYVL53L1X.getDistance() / 10.f);
-                if (SF.distance_Y < 0)
-                {
-                    SF.distance_Y = SF.dataLast;
-                }
-                SF.speed_y = (SF.distance_Y - SF.dataLast) / ((timeStart - timeEnd) / 1000000.f);
-                DF.MYVL53L1X.startMeasurement(0);
-                timeEnd = micros();
+                now = (int)(Testy.getDistance() / 10.f);
+                SF.distance_Y = (int)(Testy.getDistance() / 10.f);
+                nowL = nowL * 0.7 + now * 0.3;
+                SF.speed_y = (nowL - Last) / (100000.f / 1000000.f);
+                Last = nowL;
             }
-            usleep(100000);
+
+            etime = micros();
+            if (100000.f < (etime - stime))
+                usleep(50);
+            else
+                usleep(100000.f - (etime - stime));
         }
     });
 }
 
 void YJSP_AP::YJSP::UserInput(int Forward, int Horizontal, int Yaw, int Input_Yaw)
 {
+    PF.IsPositionDisable = true;
     RF.Auto_Forward = Forward;
     RF.Auto_Horizontal = Horizontal;
     RF.Auto_Yaw = Yaw;
     RF.InputYaw = Input_Yaw;
+}
+
+void YJSP_AP::YJSP::UserLocationSet(int TargetX, int TargetY)
+{
+    PF.IsPositionDisable = false;
+    PF.UserTargetPostionX = TargetX;
+    PF.UserTargetPostionY = TargetY;
 }
 
 void YJSP_AP::YJSP::RCThreadREG()
@@ -300,10 +314,10 @@ void YJSP_AP::YJSP::DEBUGThreadREG()
                   << "AccelZ    : " << std::setw(7) << std::setfill(' ') << (int)SF.myData._uORB_Acceleration_Z << "cm/s2| \n";
         std::cout << "Real_Yaw: " << std::setw(7) << std::setfill(' ') << (int)SF.Real_Yaw << "\n";
         std::cout << "SPPED X   : " << std::setw(7) << std::setfill(' ') << (int)EF.SPEED_X << "cm/s|"
-                  << "SPEED XEKF: " << std::setw(7) << std::setfill(' ') << (int)EF.SPEED_X_EKF << "cm/s|"
+                  << "FORINPUT:   " << std::setw(7) << std::setfill(' ') << (int)PF.ForInput << "cm/s|"
                   << "SPPED Y   : " << std::setw(7) << std::setfill(' ') << (int)EF.SPEED_Y << "cm/s|\n";
-        std::cout << "speed x   : " << std::setw(7) << std::setfill(' ') << (int)(SF.speed_x / 10) << "cm/s|\n";
-        std::cout << "speed y   : " << std::setw(7) << std::setfill(' ') << (int)(SF.speed_y / 10) << "cm/s|\n";
+        std::cout << "speed x   : " << std::setw(7) << std::setfill(' ') << (int)SF.speed_x << "cm/s|\n";
+        std::cout << "speed y   : " << std::setw(7) << std::setfill(' ') << (int)SF.speed_y << "cm/s|\n";
         std::cout << "Distance_X  : " << std::setw(7) << std::setfill(' ') << SF.distance_X << " cm\n";
         std::cout << "Distance_Y  : " << std::setw(7) << std::setfill(' ') << SF.distance_Y << " cm\n";
 

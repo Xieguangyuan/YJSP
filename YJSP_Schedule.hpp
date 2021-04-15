@@ -25,6 +25,7 @@ namespace YJSP_AP
         void ESCThreadREG();
         void DEBUGThreadREG();
         void UserInput(int Forward, int Horizontal, int Yaw, int Input_Yaw);
+        void UserLocationSet(int TargetX, int TargetY);
         void PWMUserInput(int pinBase, int on, int off);
         void Servo_ArmGrab1();
         void Servo_ArmGrab2();
@@ -40,7 +41,7 @@ namespace YJSP_AP
             OnRCDataInComing = call_BACK;
         }
 
-    private:
+        // protected:
         std::function<void(int *)> OnRCDataInComing;
 
         struct Device
@@ -88,6 +89,13 @@ namespace YJSP_AP
 
         struct PIDData
         {
+            float YawInput;
+            float ForInput;
+            float HorInput;
+
+            int SPEED_X_EKF;
+            int SPEED_Y_EKF;
+
             float PIDYawPGain = 0;
             float PIDYawIGain = 0;
             float PIDYawDGain = 0;
@@ -112,11 +120,15 @@ namespace YJSP_AP
             float TotalForwardDFilter = 0;
             float TotalHorIFilter = 0;
             float TotalHorDFilter = 0;
+
+            bool IsPositionDisable = false;
+            bool IsSpeedDisable = true;
+            float UserTargetPostionX = 0;
+            float UserTargetPostionY = 0;
         } PF;
 
         struct ESCData
         {
-
             double SPEED_X = 0;
             double SPEED_X_EKF = 0;
             double SPEED_Y = 0;
@@ -152,6 +164,7 @@ namespace YJSP_AP
             MPUData myData;
             int speed_x = 0;
             int speed_y = 0;
+            int speed_y_tmp = 0;
             int distance_X = 0;
             int distance_Y = 0;
             double AccelCaliData[30];

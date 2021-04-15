@@ -4,26 +4,40 @@
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <wiringPi.h>
+#include <queue>
 #include <thread>
 #include <opencv2/opencv.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/imgproc/types_c.h>
 #include "YJSP_Schedule.hpp"
 #include "saftyMat.hpp"
-
 #include "pca9685.h"
 #include "lcd1602.h"
 #include "VL53L1XDev.hpp"
 #include "thirdparty/RuModule/SRC/_Excutable/Drive_Json.hpp"
 #include "thirdparty/QRModule/src/qrscanner.hpp"
+#include "thirdparty/RuModule/SRC/_Excutable/Drive_Json.hpp"
 #include "thirdparty/RuModule/SRC/_VisionBase/CameraDrive/Drive_V4L2Reader.hpp"
 #include "thirdparty/RuModule/SRC/_VisionBase/VisionAIDrive/Drive_OpenCVDN.hpp"
 using namespace cv;
+using json = nlohmann::json;
 double MAX_Area = 0;
 float YawOutput = 0;
 float CXOutput = 0;
 float CXOutputILast = 0;
 float CXOutputDLast = 0;
+bool QR_Number = false;
+bool Red = false;
+bool Green = false;
+bool Blue = false;
+
+int H_LOW = 0, S_LOW = 0, V_LOW = 0;
+int H_HIGH = 179;
+int S_HIGH = 255;
+int V_HIGH = 255;
+
+int cx = 0;
+int cy = 0;
 
 void configWrite(const char *configDir, const char *Target, double obj);
 double configSettle(const char *configDir, const char *Target);
@@ -56,7 +70,7 @@ int main(int argc, char *argv[])
             while (true)
             {
                 cap >> src;
-                resize(src, src, cv::Size(800, 600));
+                resize(src, src, cv::Size(640, 480));
                 rotate(src, src, cv::ROTATE_180);
                 cvtColor(src, tmp, COLOR_BGR2HSV);
                 //inRange(tmp, Scalar(90, 160, 0), Scalar(100, 255, 255), tmp); //blue               Scalar(LOW_H,LOW_S,LOW_V),Scalar(HIGH_H,HIGH_S,HIGH_V)
@@ -193,10 +207,16 @@ int main(int argc, char *argv[])
             cv::Mat src;
             cv::Mat tmp;
             cv::Mat QRTmp;
+            bool MissonStartFlag = false;
+            std::string dataBuffer[256];
+            std::queue<std::string> dataQueue;
             FrameBuffer<cv::Mat> syncBuffer;
 
             std::vector<decodedObject> decodeOB;
             cv::VideoCapture cap(0);
+
+            cap.set(cv::CAP_PROP_FRAME_WIDTH, 640);
+            cap.set(cv::CAP_PROP_FRAME_HEIGHT, 480);
             QRSCanner myScanner;
 
             cv::namedWindow("AICamer", cv::WINDOW_NORMAL);
@@ -207,17 +227,16 @@ int main(int argc, char *argv[])
             SPGO.MPUThreadREG();
             SPGO.RCThreadREG();
             SPGO.ESCThreadREG();
-            //SPGO.PositionThreadREG();
+            SPGO.PositionThreadREG();
 
             std::thread QRcamer = std::thread([&] {
                 while (true)
                 {
                     cap >> src;
-                    resize(src, src, cv::Size(800, 600));
                     rotate(src, src, cv::ROTATE_180);
                     syncBuffer.pushFrame(src);
                     cvtColor(src, tmp, COLOR_BGR2HSV);
-                    inRange(tmp, Scalar(150, 160, 0), Scalar(179, 255, 255), tmp); //red //Scalar(LOW_H,LOW_S,LOW_V),Scalar(HIGH_H,HIGH_S,HIGH_V)
+                    inRange(tmp, Scalar(H_LOW, S_LOW, V_LOW), Scalar(H_HIGH, S_HIGH, V_HIGH), tmp); //red //Scalar(LOW_H,LOW_S,LOW_V),Scalar(HIGH_H,HIGH_S,HIGH_V)
 
                     erode(tmp, tmp, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));    //腐蚀
                     dilate(tmp, tmp, getStructuringElement(MORPH_ELLIPSE, Size(20, 20))); //膨胀
@@ -225,8 +244,6 @@ int main(int argc, char *argv[])
                     std::vector<std::vector<cv::Point>> contours;
                     findContours(tmp, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
                     MAX_Area = 0;
-                    int cx = 0;
-                    int cy = 0;
                     int upY = INT_MAX, lowY = 0, upX, lowX;
                     for (int i = 0; i < contours.size(); i++)
                     {
@@ -254,17 +271,15 @@ int main(int argc, char *argv[])
                                 cy = mu[i].m01 / mu[i].m00;
                             }
                         }
-                    }
-                    //
-                    double CXInput = -1 * (cx - 400);
-                    PIDCaclOut(CXInput, CXInput, CXInput, CXOutput, CXOutputILast, CXOutputDLast, 0.5, 0.07, 5, 100.f);
-                    //PIDCaclOut(CXInput, CXInput, CXInput, CXOutput, CXOutputILast, CXOutputDLast, 0.1, 0, 0, 0);
+                        //
+                        double CXInput = cx - 280;
+                        // PIDCaclOut(CXInput, CXInput, CXInput, CXOutput, CXOutputILast, CXOutputDLast, 0.5, 0, 0, 100.f);
 
-                    SPGO.UserInput(CXInput, 0, 0, 0);
-                    // SPGO.PWMUserInput(8, 0, CXInput);
-                    circle(src, Point(cx, cy), 10, Scalar(0, 0, 0));
-                    imshow("AICamer", src);
-                    cv::waitKey(10);
+                        // SPGO.UserInput(CXOutput, 0, 0, 0);
+                        circle(src, Point(cx, cy), 10, Scalar(0, 0, 0));
+                        imshow("AICamer", src);
+                        cv::waitKey(10);
+                    }
                 }
             });
 
@@ -279,6 +294,43 @@ int main(int argc, char *argv[])
                         {
                             decodeOB = myScanner.QRCodeDecoder(QRTmp);
                             QRTmp = QRSCanner::QRCodeDrawer(decodeOB, QRTmp);
+                            for (size_t i = 0; i < decodeOB.size(); i++)
+                            {
+                                if (decodeOB[i].data == "123+321")
+                                {
+                                    lcd1602SetCursor(9, 0);
+                                    lcd1602WriteString("123+321");
+                                }
+                                QR_Number = true;
+                            }
+                        }
+                        if (QR_Number)
+                        {
+                            H_LOW = 150, S_LOW = 160, V_LOW = 0;
+                            H_HIGH = 179;
+                            S_HIGH = 255;
+                            V_HIGH = 255;
+
+                            if (Green)
+                            {
+                                H_LOW = 60, S_LOW = 80, V_LOW = 70;
+                                H_HIGH = 90;
+                                S_HIGH = 140;
+                                V_HIGH = 255;
+                            }
+                            if (Blue)
+                            {
+                                H_LOW = 90, S_LOW = 160, V_LOW = 0;
+                                H_HIGH = 100;
+                                S_HIGH = 255;
+                                V_HIGH = 255;
+                            }
+                            if (SPGO.SF.speed_x == 0)
+                            {
+                                if (290 < cx < 270)
+                                {
+                                }
+                            }
                         }
                     }
                     if (syncBuffer.size() > 15)
@@ -286,47 +338,29 @@ int main(int argc, char *argv[])
                     usleep(200000);
                 }
             });
-            bool finish = true;
-            bool finishs = true;
+
+            std::thread Mission = std::thread([&] {
+                while (!MissonStartFlag)
+                    usleep(50000);
+                SPGO.UserLocationSet(SPGO.SF.distance_X, 40);
+                while (!(37 < SPGO.SF.distance_Y && SPGO.SF.distance_Y < 43))
+                    usleep(50000);
+                SPGO.UserLocationSet(100, 40);
+            });
+
             SPGO.OnRCDataCome([&](auto *RCData) {
                 if (RCData[7] > 1700 && RCData[7] < 2000)
                 {
-                    finish = false;
+                    MissonStartFlag = true;
                 }
                 else
                 {
-                    finish = true;
-                    finishs = true;
-                }
-
-                if (!finish)
-                {
-                    if (finishs)
-                    {
-
-                        finishs = false;
-                    }
+                    MissonStartFlag = false;
                 }
             });
 
             SPGO.DEBUGThreadREG();
-            // QRcamer.join();
-
-            // std::thread CameraThreading = std::thread([&] {
-            //     cv::VideoCapture cap(0);
-            //     cv::namedWindow("test", cv::WINDOW_NORMAL);
-            //     cv::setWindowProperty("test", cv::WND_PROP_FULLSCREEN, cv::WINDOW_FULLSCREEN);
-            //     while (true)
-            //     {
-            //         cv::Mat TmpMat;
-            //         cap.read(TmpMat);
-            //         TmpMat = MyEngine.CVInferMatSync(TmpMat);
-            //         cv::resize(TmpMat, TmpMat, cv::Size(800, 600));
-            //         cv::rotate(TmpMat, TmpMat, cv::ROTATE_180);
-            //         cv::imshow("test", TmpMat);
-            //         cv::waitKey(10);
-            //     }
-            // });
+            usleep(-1);
         }
         break;
         case 'F':
@@ -426,10 +460,12 @@ int main(int argc, char *argv[])
             int etime = 0;
             VL53L1XDevice Test;
             Test.begin("/dev/i2c-1", 0x29);
+            Test.startMeasurement(0);
             Test.writeRegister(VL53L1_I2C_SLAVE__DEVICE_ADDRESS, 0x33);
             Test.~VL53L1XDevice();
-            sleep(2);
             Test.begin("/dev/i2c-1", 0x33);
+            sleep(2);
+
             while (true)
             {
                 stime = micros();
