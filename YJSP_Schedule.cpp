@@ -47,16 +47,29 @@ void YJSP_AP::YJSP::MPUThreadREG()
             EF.SPEED_Y = EF.SPEED_Y + (int)SF.myData._uORB_Acceleration_Y * (TF.TimeMax / 1000000.f);
             EF.SPEED_X = EF.SPEED_X * 0.995 + (SF.speed_x) * (1.f - 0.995);
             EF.SPEED_Y = EF.SPEED_Y * 0.995 + (SF.speed_y) * (1.f - 0.995);
+            EF.MOVE_X += (int)EF.SPEED_X * (TF.TimeMax / 1000000.f);
+            EF.MOVE_Y += (int)EF.SPEED_Y * (TF.TimeMax / 1000000.f);
+            EF.MOVE_X = EF.MOVE_X * 0.95 + SF.distance_X * (1.f - 0.95);
+            EF.MOVE_Y = EF.MOVE_Y * 0.95 + SF.distance_Y * (1.f - 0.95);
             {
                 if (RF.RC_Auto)
                 {
                     if (PF.IsPositionDisable)
                     {
-                        PF.UserTargetPostionX = SF.distance_X;
-                        PF.UserTargetPostionY = SF.distance_Y;
+                        PF.UserTargetPostionX = EF.MOVE_X;
+                        PF.UserTargetPostionY = EF.MOVE_Y;
                     }
-                    PF.ForInput = (EF.SPEED_X - RF.Auto_Forward) + (SF.distance_X - PF.UserTargetPostionX) * 8.f;
-                    PF.HorInput = (EF.SPEED_Y - RF.Auto_Horizontal) + (SF.distance_Y - PF.UserTargetPostionY) * 8.f;
+
+                    if (PF.IsSpeedDisable)
+                    {
+                        PF.ForInput = 0;
+                        PF.HorInput = 0;
+                    }
+                    else
+                    {
+                        PF.ForInput = (EF.SPEED_X - RF.Auto_Forward) + (EF.MOVE_X - PF.UserTargetPostionX) * 9.f;
+                        PF.HorInput = (EF.SPEED_Y - RF.Auto_Horizontal) + (EF.MOVE_Y - PF.UserTargetPostionY) * 9.f;
+                    }
                     PF.YawInput = (RF.Auto_Yaw + SF.myData._uORB_Gryo___Yaw) + SF.Real_Yaw * 15.f - RF.InputYaw * 15.f;
                 }
                 else
@@ -106,27 +119,26 @@ void YJSP_AP::YJSP::PositionThreadREG()
     TF.PosThreading = std::thread([&] {
         int Last = 0;
         int now = 0;
-        int nowL = 0;
         SF.speed_x = 0.f;
         int stime = 0;
         int etime = 0;
         VL53L1XDevice Testx;
-        //Testx.begin("/dev/i2c-1", 0x29);
-        Testx.startMeasurement(0);
+        // Testx.begin("/dev/i2c-1", 0x29);
+        // Testx.startMeasurement(0);
         // Testx.writeRegister(VL53L1_I2C_SLAVE__DEVICE_ADDRESS, 0x33);
         // Testx.~VL53L1XDevice();
         //sleep(2);
         Testx.begin("/dev/i2c-1", 0x33);
+        Testx.Setmode('L');
         while (true)
         {
             stime = micros();
             if (Testx.newDataReady())
             {
                 now = (int)(Testx.getDistance() / 10.f);
-                SF.distance_X = (int)(Testx.getDistance() / 10.f);
-                nowL = nowL * 0.7 + now * 0.3;
-                SF.speed_x = (nowL - Last) / (100000.f / 1000000.f);
-                Last = nowL;
+                SF.distance_X = SF.distance_X * 0.1 + now * 0.9;
+                SF.speed_x = (SF.distance_X - Last) / (100000.f / 1000000.f);
+                Last = SF.distance_X;
             }
 
             etime = micros();
@@ -146,6 +158,7 @@ void YJSP_AP::YJSP::PositionThreadREG()
         int etime = 0;
         VL53L1XDevice Testy;
         Testy.begin("/dev/i2c-1", 0x29);
+        Testy.Setmode('L');
         Testy.startMeasurement(0);
         while (true)
         {
@@ -153,10 +166,9 @@ void YJSP_AP::YJSP::PositionThreadREG()
             if (Testy.newDataReady())
             {
                 now = (int)(Testy.getDistance() / 10.f);
-                SF.distance_Y = (int)(Testy.getDistance() / 10.f);
-                nowL = nowL * 0.7 + now * 0.3;
-                SF.speed_y = (nowL - Last) / (100000.f / 1000000.f);
-                Last = nowL;
+                SF.distance_Y = SF.distance_Y * 0.1 + now * 0.9;
+                SF.speed_y = (now - Last) / (100000.f / 1000000.f);
+                Last = now;
             }
 
             etime = micros();
@@ -168,9 +180,10 @@ void YJSP_AP::YJSP::PositionThreadREG()
     });
 }
 
-void YJSP_AP::YJSP::UserInput(int Forward, int Horizontal, int Yaw, int Input_Yaw)
+void YJSP_AP::YJSP::UserInput(int Forward, int Horizontal, int Yaw, int Input_Yaw, bool DisableSpeed)
 {
     PF.IsPositionDisable = true;
+    PF.IsSpeedDisable = DisableSpeed;
     RF.Auto_Forward = Forward;
     RF.Auto_Horizontal = Horizontal;
     RF.Auto_Yaw = Yaw;
@@ -318,8 +331,8 @@ void YJSP_AP::YJSP::DEBUGThreadREG()
                   << "SPPED Y   : " << std::setw(7) << std::setfill(' ') << (int)EF.SPEED_Y << "cm/s|\n";
         std::cout << "speed x   : " << std::setw(7) << std::setfill(' ') << (int)SF.speed_x << "cm/s|\n";
         std::cout << "speed y   : " << std::setw(7) << std::setfill(' ') << (int)SF.speed_y << "cm/s|\n";
-        std::cout << "Distance_X  : " << std::setw(7) << std::setfill(' ') << SF.distance_X << " cm\n";
-        std::cout << "Distance_Y  : " << std::setw(7) << std::setfill(' ') << SF.distance_Y << " cm\n";
+        std::cout << "Distance_X  : " << std::setw(7) << std::setfill(' ') << (int)EF.MOVE_X << " cm\n";
+        std::cout << "Distance_Y  : " << std::setw(7) << std::setfill(' ') << (int)EF.MOVE_Y << " cm\n";
 
         for (int i = 0; i < 10; i++)
         {
@@ -383,254 +396,259 @@ double YJSP_AP::YJSP::configWrite(const char *configDir, const char *Target, dou
 
 void YJSP_AP::YJSP::Servo_ArmGrab1()
 {
-    for (int i = 420; i >= 320; i--)
+    for (int i = 435; i >= 320; i--)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(5, 0, i);
     }
     for (int i = 450; i >= 300; i--)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(6, 0, i);
     }
-    for (int i = 390; i >= 230; i--)
+    for (int i = 390; i >= 225; i--)
     {
-        delay(10);
+        delay(8);
         PWMUserInput(7, 0, i);
     }
 
     for (int i = 300; i <= 360; i++)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(6, 0, i);
     }
 
     for (int i = 200; i >= 150; i--)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(4, 0, i);
     }
-    for (int i = 230; i <= 390; i++)
+    for (int i = 225; i <= 390; i++)
     {
-        delay(10);
+        delay(8);
         PWMUserInput(7, 0, i);
     }
     for (int i = 360; i <= 450; i++)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(6, 0, i);
     }
     for (int i = 330; i <= 420; i++)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(5, 0, i);
     }
     for (int i = 400; i >= 350; i--)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(8, 0, i);
     }
     for (int i = 420; i <= 440; i++)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(5, 0, i);
     }
     for (int i = 450; i <= 460; i++)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(6, 0, i);
     }
     for (int i = 390; i >= 340; i--)
     {
-        delay(10);
+        delay(8);
         PWMUserInput(7, 0, i);
     }
 
     for (int i = 150; i <= 200; i++)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(4, 0, i);
     }
-    for (int i = 440; i >= 420; i--)
+    for (int i = 440; i >= 435; i--)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(5, 0, i);
     }
     for (int i = 460; i >= 450; i--)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(6, 0, i);
     }
     for (int i = 340; i <= 390; i++)
     {
-        delay(10);
+        delay(8);
         PWMUserInput(7, 0, i);
     }
     for (int i = 350; i <= 400; i++)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(8, 0, i);
     }
 }
 
 void YJSP_AP::YJSP::Servo_ArmGrab2()
 {
-    for (int i = 420; i >= 320; i--)
+    for (int i = 435; i >= 320; i--)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(5, 0, i);
     }
     for (int i = 450; i >= 300; i--)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(6, 0, i);
     }
-    for (int i = 390; i >= 230; i--)
+    for (int i = 390; i >= 225; i--)
     {
-        delay(10);
+        delay(8);
         PWMUserInput(7, 0, i);
     }
 
     for (int i = 300; i <= 360; i++)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(6, 0, i);
     }
 
     for (int i = 200; i >= 150; i--)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(4, 0, i);
     }
-    for (int i = 230; i <= 380; i++)
+    for (int i = 225; i <= 380; i++)
     {
-        delay(10);
+        delay(8);
         PWMUserInput(7, 0, i);
     }
     for (int i = 360; i <= 450; i++)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(6, 0, i);
     }
     for (int i = 330; i <= 420; i++)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(5, 0, i);
     }
     for (int i = 400; i <= 480; i++)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(8, 0, i);
     }
     for (int i = 380; i >= 320; i--)
     {
-        delay(10);
+        delay(8);
         PWMUserInput(7, 0, i);
     }
     for (int i = 150; i <= 200; i++)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(4, 0, i);
     }
     for (int i = 320; i <= 390; i++)
     {
-        delay(10);
+        delay(8);
         PWMUserInput(7, 0, i);
     }
     for (int i = 480; i >= 400; i--)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(8, 0, i);
+    }
+    for (int i = 420; i <= 435; i++)
+    {
+        delay(5);
+        PWMUserInput(5, 0, i);
     }
 }
 
 void YJSP_AP::YJSP::Servo_ArmGrab3()
 {
-    for (int i = 420; i >= 320; i--)
+    for (int i = 435; i >= 320; i--)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(5, 0, i);
     }
     for (int i = 450; i >= 300; i--)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(6, 0, i);
     }
-    for (int i = 390; i >= 230; i--)
+    for (int i = 390; i >= 225; i--)
     {
-        delay(10);
+        delay(8);
         PWMUserInput(7, 0, i);
     }
 
     for (int i = 300; i <= 360; i++)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(6, 0, i);
     }
 
     for (int i = 200; i >= 150; i--)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(4, 0, i);
     }
 
     for (int i = 360; i >= 100; i--)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(6, 0, i);
     }
 
     for (int i = 320; i >= 230; i--)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(5, 0, i);
     }
 
     for (int i = 150; i <= 200; i++)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(4, 0, i);
     }
 
     for (int i = 230; i <= 320; i++)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(5, 0, i);
     }
 
     for (int i = 100; i <= 120; i++)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(6, 0, i);
     }
 
-    for (int i = 230; i <= 305; i++)
+    for (int i = 225; i <= 305; i++)
     {
-        delay(10);
+        delay(8);
         PWMUserInput(7, 0, i);
     }
 
     for (int i = 120; i <= 300; i++)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(6, 0, i);
     }
 
     for (int i = 305; i <= 390; i++)
     {
-        delay(10);
+        delay(8);
         PWMUserInput(7, 0, i);
     }
 
     for (int i = 300; i <= 450; i++)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(6, 0, i);
     }
 
-    for (int i = 320; i <= 420; i++)
+    for (int i = 320; i <= 435; i++)
     {
-        delay(10);
+        delay(5);
         PWMUserInput(5, 0, i);
     }
 }
@@ -639,22 +657,427 @@ void YJSP_AP::YJSP::Servo_ArmPlace1()
 {
     for (int i = 390; i >= 360; i--)
     {
+        delay(8);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 400; i >= 350; i--)
+    {
+        delay(8);
+        PWMUserInput(8, 0, i);
+    }
+    for (int i = 450; i <= 475; i++)
+    {
+        delay(8);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 435; i >= 425; i--)
+    {
+        delay(8);
+        PWMUserInput(5, 0, i);
+    }
+    for (int i = 360; i >= 340; i--)
+    {
+        delay(8);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 200; i >= 150; i--)
+    {
+        delay(8);
+        PWMUserInput(4, 0, i);
+    }
+    for (int i = 340; i <= 360; i++)
+    {
+        delay(8);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 350; i <= 405; i++)
+    {
+        delay(8);
+        PWMUserInput(8, 0, i);
+    }
+    for (int i = 425; i >= 320; i--)
+    {
+        delay(8);
+        PWMUserInput(5, 0, i);
+    }
+    for (int i = 360; i >= 300; i--)
+    {
+        delay(8);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 475; i >= 300; i--)
+    {
+        delay(8);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 320; i >= 210; i--)
+    {
+        delay(8);
+        PWMUserInput(5, 0, i);
+    }
+    for (int i = 300; i <= 380; i++)
+    {
+        delay(8);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 300; i >= 180; i--)
+    {
+        delay(8);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 150; i <= 200; i++)
+    {
+        delay(8);
+        PWMUserInput(4, 0, i);
+    }
+    for (int i = 180; i <= 390; i++)
+    {
+        delay(8);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 380; i <= 450; i++)
+    {
+        delay(8);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 210; i <= 435; i++)
+    {
+        delay(8);
+        PWMUserInput(5, 0, i);
+    }
+}
+
+void YJSP_AP::YJSP::Servo_ArmPlace2()
+{
+    for (int i = 390; i >= 360; i--)
+    {
+        delay(8);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 405; i <= 480; i++)
+    {
+        delay(8);
+        PWMUserInput(8, 0, i);
+    }
+    for (int i = 450; i <= 470; i++)
+    {
+        delay(8);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 435; i >= 380; i--)
+    {
+        delay(8);
+        PWMUserInput(5, 0, i);
+    }
+    for (int i = 360; i >= 320; i--)
+    {
+        delay(8);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 200; i >= 150; i--)
+    {
+        delay(8);
+        PWMUserInput(4, 0, i);
+    }
+    for (int i = 320; i <= 360; i++)
+    {
+        delay(8);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 480; i >= 405; i--)
+    {
+        delay(8);
+        PWMUserInput(8, 0, i);
+    }
+    for (int i = 380; i >= 320; i--)
+    {
+        delay(8);
+        PWMUserInput(5, 0, i);
+    }
+    for (int i = 360; i >= 300; i--)
+    {
+        delay(8);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 470; i >= 300; i--)
+    {
+        delay(8);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 320; i >= 210; i--)
+    {
+        delay(8);
+        PWMUserInput(5, 0, i);
+    }
+    for (int i = 300; i <= 380; i++)
+    {
+        delay(8);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 300; i >= 180; i--)
+    {
+        delay(8);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 150; i <= 200; i++)
+    {
+        delay(8);
+        PWMUserInput(4, 0, i);
+    }
+    for (int i = 180; i <= 390; i++)
+    {
+        delay(8);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 380; i <= 450; i++)
+    {
+        delay(8);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 210; i <= 435; i++)
+    {
+        delay(8);
+        PWMUserInput(5, 0, i);
+    }
+}
+
+void YJSP_AP::YJSP::Servo_ArmPlace3()
+{
+    for (int i = 435; i >= 320; i--)
+    {
+        delay(8);
+        PWMUserInput(5, 0, i);
+    }
+    for (int i = 390; i >= 300; i--)
+    {
+        delay(8);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 450; i >= 300; i--)
+    {
+        delay(8);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 300; i >= 245; i--)
+    {
+        delay(8);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 300; i >= 90; i--)
+    {
+        delay(8);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 320; i >= 250; i--)
+    {
+        delay(8);
+        PWMUserInput(5, 0, i);
+    }
+    for (int i = 200; i >= 150; i--)
+    {
+        delay(8);
+        PWMUserInput(4, 0, i);
+    }
+    for (int i = 245; i >= 180; i--)
+    {
+        delay(8);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 250; i >= 210; i--)
+    {
+        delay(8);
+        PWMUserInput(5, 0, i);
+    }
+    for (int i = 90; i <= 380; i++)
+    {
+        delay(8);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 150; i <= 200; i++)
+    {
+        delay(8);
+        PWMUserInput(4, 0, i);
+    }
+    for (int i = 180; i <= 390; i++)
+    {
+        delay(8);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 380; i <= 450; i++)
+    {
+        delay(8);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 210; i <= 435; i++)
+    {
+        delay(8);
+        PWMUserInput(5, 0, i);
+    }
+}
+
+void YJSP_AP::YJSP::Servo3_Place_Up()
+{
+    for (int i = 435; i >= 320; i--)
+    {
+        delay(8);
+        PWMUserInput(5, 0, i);
+    }
+    for (int i = 450; i >= 350; i--)
+    {
+        delay(8);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 390; i >= 235; i--)
+    {
+        delay(10);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 350; i >= 90; i--)
+    {
+        delay(8);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 320; i >= 245; i--)
+    {
+        delay(8);
+        PWMUserInput(5, 0, i);
+    }
+    for (int i = 200; i >= 150; i--)
+    {
+        delay(8);
+        PWMUserInput(4, 0, i);
+    }
+    for (int i = 245; i <= 420; i++)
+    {
+        delay(8);
+        PWMUserInput(5, 0, i);
+    }
+    for (int i = 90; i <= 210; i++)
+    {
+        delay(8);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 235; i <= 410; i++)
+    {
+        delay(10);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 150; i <= 200; i++)
+    {
+        delay(8);
+        PWMUserInput(4, 0, i);
+    }
+    for (int i = 210; i <= 450; i++)
+    {
+        delay(8);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 410; i >= 390; i--)
+    {
+        delay(10);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 420; i <= 435; i++)
+    {
+        delay(8);
+        PWMUserInput(5, 0, i);
+    }
+}
+
+void YJSP_AP::YJSP::Servo2_Place_Up()
+{
+    for (int i = 400; i <= 480; i++)
+    {
+        delay(8);
+        PWMUserInput(8, 0, i);
+    }
+    for (int i = 450; i <= 470; i++)
+    {
+        delay(8);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 435; i >= 380; i--)
+    {
+        delay(8);
+        PWMUserInput(5, 0, i);
+    }
+    for (int i = 390; i >= 320; i--)
+    {
+        delay(8);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 200; i >= 150; i--)
+    {
+        delay(8);
+        PWMUserInput(4, 0, i);
+    }
+    for (int i = 320; i <= 360; i++)
+    {
+        delay(8);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 480; i >= 400; i--)
+    {
+        delay(8);
+        PWMUserInput(8, 0, i);
+    }
+    for (int i = 380; i <= 420; i++)
+    {
+        delay(8);
+        PWMUserInput(5, 0, i);
+    }
+    for (int i = 470; i >= 210; i--)
+    {
+        delay(8);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 360; i <= 410; i++)
+    {
+        delay(10);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 150; i <= 200; i++)
+    {
+        delay(8);
+        PWMUserInput(4, 0, i);
+    }
+    for (int i = 210; i <= 450; i++)
+    {
+        delay(8);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 410; i >= 390; i--)
+    {
+        delay(10);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 420; i <= 435; i++)
+    {
+        delay(8);
+        PWMUserInput(5, 0, i);
+    }
+}
+
+void YJSP_AP::YJSP::Servo1_Place_Up()
+{
+    for (int i = 390; i >= 360; i--)
+    {
         delay(10);
         PWMUserInput(7, 0, i);
     }
     for (int i = 400; i >= 350; i--)
     {
-        delay(10);
+        delay(8);
         PWMUserInput(8, 0, i);
     }
     for (int i = 450; i <= 475; i++)
     {
-        delay(10);
+        delay(8);
         PWMUserInput(6, 0, i);
     }
-    for (int i = 420; i <= 425; i++)
+    for (int i = 435; i <= 425; i++)
     {
-        delay(10);
+        delay(8);
         PWMUserInput(5, 0, i);
     }
     for (int i = 360; i >= 340; i--)
@@ -664,7 +1087,7 @@ void YJSP_AP::YJSP::Servo_ArmPlace1()
     }
     for (int i = 200; i >= 150; i--)
     {
-        delay(10);
+        delay(8);
         PWMUserInput(4, 0, i);
     }
     for (int i = 340; i <= 360; i++)
@@ -672,478 +1095,714 @@ void YJSP_AP::YJSP::Servo_ArmPlace1()
         delay(10);
         PWMUserInput(7, 0, i);
     }
-    for (int i = 350; i <= 405; i++)
+    for (int i = 350; i <= 400; i++)
     {
-        delay(10);
+        delay(8);
         PWMUserInput(8, 0, i);
     }
-    for (int i = 425; i >= 320; i--)
-    {
-        delay(10);
-        PWMUserInput(5, 0, i);
-    }
-    for (int i = 360; i >= 300; i--)
-    {
-        delay(10);
-        PWMUserInput(7, 0, i);
-    }
-    for (int i = 475; i >= 300; i--)
-    {
-        delay(10);
-        PWMUserInput(6, 0, i);
-    }
-    for (int i = 320; i >= 210; i--)
-    {
-        delay(10);
-        PWMUserInput(5, 0, i);
-    }
-    for (int i = 300; i <= 380; i++)
-    {
-        delay(10);
-        PWMUserInput(6, 0, i);
-    }
-    for (int i = 300; i >= 180; i--)
-    {
-        delay(10);
-        PWMUserInput(7, 0, i);
-    }
-    for (int i = 150; i <= 200; i++)
-    {
-        delay(10);
-        PWMUserInput(4, 0, i);
-    }
-    for (int i = 180; i <= 390; i++)
-    {
-        delay(10);
-        PWMUserInput(7, 0, i);
-    }
-    for (int i = 380; i <= 450; i++)
-    {
-        delay(10);
-        PWMUserInput(6, 0, i);
-    }
-    for (int i = 210; i <= 420; i++)
-    {
-        delay(10);
-        PWMUserInput(5, 0, i);
-    }
-}
 
-void YJSP_AP::YJSP::Servo_ArmPlace2()
-{
-    for (int i = 390; i >= 360; i--)
+    for (int i = 425; i >= 420; i--)
     {
-        delay(10);
-        PWMUserInput(7, 0, i);
-    }
-    for (int i = 405; i <= 480; i++)
-    {
-        delay(10);
-        PWMUserInput(8, 0, i);
-    }
-    for (int i = 450; i <= 470; i++)
-    {
-        delay(10);
-        PWMUserInput(6, 0, i);
-    }
-    for (int i = 420; i >= 380; i--)
-    {
-        delay(10);
+        delay(8);
         PWMUserInput(5, 0, i);
     }
-    for (int i = 360; i >= 320; i--)
+    for (int i = 475; i >= 210; i--)
     {
-        delay(10);
-        PWMUserInput(7, 0, i);
-    }
-    for (int i = 200; i >= 150; i--)
-    {
-        delay(10);
-        PWMUserInput(4, 0, i);
-    }
-    for (int i = 320; i <= 360; i++)
-    {
-        delay(10);
-        PWMUserInput(7, 0, i);
-    }
-    for (int i = 480; i >= 405; i--)
-    {
-        delay(10);
-        PWMUserInput(8, 0, i);
-    }
-    for (int i = 380; i >= 320; i--)
-    {
-        delay(10);
-        PWMUserInput(5, 0, i);
-    }
-    for (int i = 360; i >= 300; i--)
-    {
-        delay(10);
-        PWMUserInput(7, 0, i);
-    }
-    for (int i = 470; i >= 300; i--)
-    {
-        delay(10);
+        delay(8);
         PWMUserInput(6, 0, i);
     }
-    for (int i = 320; i >= 210; i--)
-    {
-        delay(10);
-        PWMUserInput(5, 0, i);
-    }
-    for (int i = 300; i <= 380; i++)
-    {
-        delay(10);
-        PWMUserInput(6, 0, i);
-    }
-    for (int i = 300; i >= 180; i--)
+    for (int i = 360; i <= 410; i++)
     {
         delay(10);
         PWMUserInput(7, 0, i);
     }
     for (int i = 150; i <= 200; i++)
     {
-        delay(10);
+        delay(8);
         PWMUserInput(4, 0, i);
     }
-    for (int i = 180; i <= 390; i++)
+    for (int i = 210; i <= 450; i++)
     {
-        delay(10);
-        PWMUserInput(7, 0, i);
-    }
-    for (int i = 380; i <= 450; i++)
-    {
-        delay(10);
-        PWMUserInput(6, 0, i);
-    }
-    for (int i = 210; i <= 420; i++)
-    {
-        delay(10);
-        PWMUserInput(5, 0, i);
-    }
-}
 
-void YJSP_AP::YJSP::Servo_ArmPlace3()
-{
-    for (int i = 420; i >= 320; i--)
-    {
-        delay(10);
-        PWMUserInput(5, 0, i);
+        delay(8);
+        PWMUserInput(6, 0, i);
     }
-    for (int i = 390; i >= 300; i--)
+    for (int i = 410; i >= 390; i--)
     {
         delay(10);
         PWMUserInput(7, 0, i);
     }
-    for (int i = 450; i >= 300; i--)
+    for (int i = 420; i <= 435; i++)
     {
-        delay(10);
-        PWMUserInput(6, 0, i);
-    }
-    for (int i = 300; i >= 245; i--)
-    {
-        delay(10);
-        PWMUserInput(7, 0, i);
-    }
-    for (int i = 300; i >= 90; i--)
-    {
-        delay(10);
-        PWMUserInput(6, 0, i);
-    }
-    for (int i = 320; i >= 250; i--)
-    {
-        delay(10);
-        PWMUserInput(5, 0, i);
-    }
-    for (int i = 200; i >= 150; i--)
-    {
-        delay(10);
-        PWMUserInput(4, 0, i);
-    }
-    for (int i = 245; i >= 180; i--)
-    {
-        delay(10);
-        PWMUserInput(7, 0, i);
-    }
-    for (int i = 250; i >= 210; i--)
-    {
-        delay(10);
-        PWMUserInput(5, 0, i);
-    }
-    for (int i = 90; i <= 380; i++)
-    {
-        delay(10);
-        PWMUserInput(6, 0, i);
-    }
-    for (int i = 150; i <= 200; i++)
-    {
-        delay(10);
-        PWMUserInput(4, 0, i);
-    }
-    for (int i = 180; i <= 390; i++)
-    {
-        delay(10);
-        PWMUserInput(7, 0, i);
-    }
-    for (int i = 380; i <= 450; i++)
-    {
-        delay(10);
-        PWMUserInput(6, 0, i);
-    }
-    for (int i = 210; i <= 420; i++)
-    {
-        delay(10);
+        delay(8);
         PWMUserInput(5, 0, i);
     }
 }
 
 void YJSP_AP::YJSP::Servo_ArmGet1()
 {
-    PWMUserInput(8, 0, 410);
-    for (int i = 250; i <= 370; i++)
+    for (int i = 435; i >= 320; i--)
     {
         delay(5);
         PWMUserInput(5, 0, i);
     }
-    for (int i = 300; i >= 200; i--)
+    for (int i = 390; i >= 300; i--)
+    {
+        delay(8);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 450; i >= 300; i--)
     {
         delay(5);
         PWMUserInput(6, 0, i);
     }
-    for (int i = 400; i >= 130; i--)
-    {
-        delay(5);
-        PWMUserInput(7, 0, i);
-    }
-    for (int i = 0; i <= 100; i++)
-    {
-        delay(5);
-        PWMUserInput(4, 0, i);
-    }
-    for (int i = 370; i >= 350; i--)
+    for (int i = 320; i >= 210; i--)
     {
         delay(5);
         PWMUserInput(5, 0, i);
     }
-    for (int i = 410; i >= 400; i--)
+    for (int i = 300; i <= 380; i++)
+    {
+        delay(5);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 300; i >= 180; i--)
+    {
+        delay(8);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 250; i >= 150; i--)
+    {
+        delay(5);
+        PWMUserInput(4, 0, i);
+    }
+    for (int i = 180; i <= 380; i++)
+    {
+        delay(8);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 380; i <= 450; i++)
+    {
+        delay(5);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 210; i <= 420; i++)
+    {
+        delay(5);
+        PWMUserInput(5, 0, i);
+    }
+
+    for (int i = 405; i >= 350; i--)
     {
         delay(5);
         PWMUserInput(8, 0, i);
     }
-    for (int i = 200; i <= 480; i++)
-    {
-        delay(5);
-        PWMUserInput(6, 0, i);
-    }
-    for (int i = 130; i <= 240; i++)
-    {
-        delay(5);
-        PWMUserInput(7, 0, i);
-    }
-    for (int i = 100; i <= 150; i++)
-    {
-        delay(5);
-        PWMUserInput(4, 0, i);
-    }
-    for (int i = 350; i >= 250; i--)
+    for (int i = 420; i <= 440; i++)
     {
         delay(5);
         PWMUserInput(5, 0, i);
     }
-    for (int i = 240; i <= 300; i++)
-    {
-        delay(5);
-        PWMUserInput(7, 0, i);
-    }
-    for (int i = 480; i >= 300; i--)
+    for (int i = 450; i <= 460; i++)
     {
         delay(5);
         PWMUserInput(6, 0, i);
     }
-    for (int i = 300; i <= 400; i++)
+    for (int i = 380; i >= 340; i--)
     {
-        delay(5);
+        delay(8);
         PWMUserInput(7, 0, i);
     }
-    for (int i = 300; i >= 120; i--)
+
+    for (int i = 150; i <= 200; i++)
+    {
+        delay(5);
+        PWMUserInput(4, 0, i);
+    }
+    for (int i = 440; i >= 420; i--)
+    {
+        delay(5);
+        PWMUserInput(5, 0, i);
+    }
+    for (int i = 460; i >= 450; i--)
     {
         delay(5);
         PWMUserInput(6, 0, i);
+    }
+    for (int i = 340; i <= 380; i++)
+    {
+        delay(8);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 350; i <= 405; i++)
+    {
+        delay(5);
+        PWMUserInput(8, 0, i);
+    }
+    for (int i = 420; i <= 435; i++)
+    {
+        delay(5);
+        PWMUserInput(5, 0, i);
     }
 }
 
 void YJSP_AP::YJSP::Servo_ArmGet2()
 {
-    PWMUserInput(8, 0, 410);
-    for (int i = 250; i <= 370; i++)
+    for (int i = 435; i >= 320; i--)
     {
         delay(5);
         PWMUserInput(5, 0, i);
     }
-    for (int i = 300; i >= 200; i--)
+    for (int i = 380; i >= 300; i--)
     {
-        delay(5);
-        PWMUserInput(6, 0, i);
-    }
-    for (int i = 400; i >= 130; i--)
-    {
-        delay(5);
+        delay(8);
         PWMUserInput(7, 0, i);
     }
-    for (int i = 0; i <= 100; i++)
-    {
-        delay(5);
-        PWMUserInput(4, 0, i);
-    }
-    for (int i = 200; i <= 400; i++)
+    for (int i = 450; i >= 300; i--)
     {
         delay(5);
         PWMUserInput(6, 0, i);
     }
-    for (int i = 130; i <= 330; i++)
-    {
-        delay(5);
-        PWMUserInput(7, 0, i);
-    }
-    for (int i = 410; i <= 490; i++)
-    {
-        delay(5);
-        PWMUserInput(8, 0, i);
-    }
-    for (int i = 400; i >= 130; i--)
-    {
-        delay(5);
-        PWMUserInput(6, 0, i);
-    }
-    for (int i = 370; i >= 220; i--)
+    for (int i = 320; i >= 210; i--)
     {
         delay(5);
         PWMUserInput(5, 0, i);
     }
-    for (int i = 100; i <= 150; i++)
+    for (int i = 300; i <= 380; i++)
+    {
+        delay(5);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 300; i >= 180; i--)
+    {
+        delay(8);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 250; i >= 150; i--)
     {
         delay(5);
         PWMUserInput(4, 0, i);
     }
-    for (int i = 220; i <= 250; i++)
+    for (int i = 180; i <= 380; i++)
+    {
+        delay(8);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 380; i <= 450; i++)
+    {
+        delay(5);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 210; i <= 420; i++)
     {
         delay(5);
         PWMUserInput(5, 0, i);
     }
 
-    for (int i = 130; i <= 300; i++)
-    {
-        delay(5);
-        PWMUserInput(6, 0, i);
-    }
-    for (int i = 330; i >= 300; i--)
-    {
-        delay(5);
-        PWMUserInput(7, 0, i);
-    }
-    for (int i = 490; i >= 410; i--)
+    for (int i = 405; i <= 480; i++)
     {
         delay(5);
         PWMUserInput(8, 0, i);
     }
-    for (int i = 300; i <= 400; i++)
+    for (int i = 380; i >= 320; i--)
     {
-        delay(5);
+        delay(8);
         PWMUserInput(7, 0, i);
     }
-    for (int i = 300; i >= 120; i--)
+    for (int i = 150; i <= 200; i++)
     {
         delay(5);
-        PWMUserInput(6, 0, i);
+        PWMUserInput(4, 0, i);
+    }
+    for (int i = 320; i <= 380; i++)
+    {
+        delay(8);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 480; i >= 405; i--)
+    {
+        delay(5);
+        PWMUserInput(8, 0, i);
+    }
+    for (int i = 420; i <= 435; i++)
+    {
+        delay(5);
+        PWMUserInput(5, 0, i);
+    }
+    for (int i = 200; i <= 250; i++)
+    {
+        delay(5);
+        PWMUserInput(4, 0, i);
     }
 }
 
 void YJSP_AP::YJSP::Servo_ArmGet3()
 {
-    PWMUserInput(8, 0, 410);
-    for (int i = 250; i <= 370; i++)
+    for (int i = 435; i >= 320; i--)
     {
         delay(5);
         PWMUserInput(5, 0, i);
     }
-    for (int i = 300; i >= 200; i--)
+    for (int i = 390; i >= 300; i--)
+    {
+        delay(8);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 450; i >= 300; i--)
     {
         delay(5);
         PWMUserInput(6, 0, i);
     }
-    for (int i = 400; i >= 130; i--)
+    for (int i = 320; i >= 210; i--)
     {
         delay(5);
+        PWMUserInput(5, 0, i);
+    }
+    for (int i = 300; i <= 380; i++)
+    {
+        delay(5);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 300; i >= 180; i--)
+    {
+        delay(8);
         PWMUserInput(7, 0, i);
     }
-    for (int i = 0; i <= 100; i++)
+    for (int i = 200; i >= 150; i--)
     {
         delay(5);
         PWMUserInput(4, 0, i);
     }
-    for (int i = 200; i <= 350; i++)
+    for (int i = 180; i <= 230; i++)
     {
-        delay(5);
-        PWMUserInput(6, 0, i);
-    }
-    for (int i = 130; i <= 380; i++)
-    {
-        delay(5);
+        delay(8);
         PWMUserInput(7, 0, i);
     }
-    for (int i = 410; i >= 355; i--)
-    {
-        delay(5);
-        PWMUserInput(8, 0, i);
-    }
-    for (int i = 350; i >= 110; i--)
+    for (int i = 380; i >= 100; i--)
     {
         delay(5);
         PWMUserInput(6, 0, i);
     }
-    for (int i = 370; i >= 220; i--)
+    for (int i = 210; i <= 230; i++)
     {
         delay(5);
         PWMUserInput(5, 0, i);
     }
 
+    for (int i = 150; i <= 200; i++)
+    {
+        delay(5);
+        PWMUserInput(4, 0, i);
+    }
+    for (int i = 230; i <= 320; i++)
+    {
+        delay(5);
+        PWMUserInput(5, 0, i);
+    }
     for (int i = 100; i <= 150; i++)
     {
         delay(5);
-        PWMUserInput(4, 0, i);
+        PWMUserInput(6, 0, i);
     }
-    for (int i = 220; i <= 250; i++)
+    for (int i = 230; i <= 300; i++)
+    {
+        delay(8);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 150; i <= 450; i++)
+    {
+        delay(5);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 300; i <= 390; i++)
+    {
+        delay(8);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 320; i <= 435; i++)
     {
         delay(5);
         PWMUserInput(5, 0, i);
     }
-    for (int i = 110; i <= 300; i++)
+    for (int i = 200; i <= 250; i++)
     {
-        delay(10);
+        delay(5);
+        PWMUserInput(4, 0, i);
+    }
+}
+
+void YJSP_AP::YJSP::Servo_Scanner()
+{
+    PWMUserInput(6, 0, 500);
+    PWMUserInput(5, 0, 360);
+    PWMUserInput(7, 0, 390);
+    PWMUserInput(8, 0, 400);
+    PWMUserInput(4, 0, 200);
+    for (int i = 500; i >= 450; i--)
+    {
+        delay(5);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 360; i <= 435; i++)
+    {
+        delay(5);
+        PWMUserInput(5, 0, i);
+    }
+}
+
+void YJSP_AP::YJSP::QRScanner()
+{
+    PWMUserInput(8, 0, 400);
+    for (int i = 450; i <= 500; i++)
+    {
+        delay(5);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 435; i >= 220; i--)
+    {
+        delay(5);
+        PWMUserInput(5, 0, i);
+    }
+    for (int i = 390; i >= 300; i--)
+    {
+        delay(5);
+        PWMUserInput(7, 0, i);
+    }
+    delay(3000);
+    for (int i = 300; i <= 390; i++)
+    {
+        delay(5);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 500; i >= 450; i--)
+    {
+        delay(5);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 220; i <= 435; i++)
+    {
+        delay(5);
+        PWMUserInput(5, 0, i);
+    }
+    PWMUserInput(8, 0, 400);
+}
+
+void YJSP_AP::YJSP::Servo_Scanner_Down()
+{
+    for (int i = 435; i >= 200; i--)
+    {
+        delay(5);
+        PWMUserInput(5, 0, i);
+    }
+    for (int i = 450; i >= 400; i--)
+    {
+        delay(5);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 390; i >= 200; i--)
+    {
+        delay(5);
+        PWMUserInput(7, 0, i);
+    }
+}
+
+void YJSP_AP::YJSP::Servo_ArmGrab1_Down()
+{
+    //左平移
+    PWMUserInput(14, 0, 1500); //A1 后退
+    PWMUserInput(2, 0, 1500);  //A2 前进
+    PWMUserInput(13, 0, 1500); //B1 前进
+    PWMUserInput(1, 0, 1500);  //B2 后退
+    delay(1000);
+    PWMUserInput(14, 0, 0); //A1 后退
+    PWMUserInput(2, 0, 0);  //A2 前进
+    PWMUserInput(13, 0, 0); //B1 前进
+    PWMUserInput(1, 0, 0);  //B2 后退
+
+    for (int i = 200; i >= 150; i--)
+    {
+        delay(5);
+        PWMUserInput(4, 0, i);
+    }
+
+    //右平移
+    PWMUserInput(15, 0, 1500); //A1 前进
+    PWMUserInput(3, 0, 1500);  //A2 后退
+    PWMUserInput(12, 0, 1500); //B1 后退
+    PWMUserInput(0, 0, 1500);  //B2 前进
+    delay(1000);
+    PWMUserInput(15, 0, 0); //A1 前进
+    PWMUserInput(3, 0, 0);  //A2 后退
+    PWMUserInput(12, 0, 0); //B1 后退
+    PWMUserInput(0, 0, 0);  //B2 前进
+
+    for (int i = 200; i <= 380; i++)
+    {
+        delay(5);
+        PWMUserInput(7, 0, i);
+    }
+
+    for (int i = 400; i <= 450; i++)
+    {
+        delay(5);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 200; i <= 420; i++)
+    {
+        delay(5);
+        PWMUserInput(5, 0, i);
+    }
+    for (int i = 400; i >= 350; i--)
+    {
+        delay(5);
+        PWMUserInput(8, 0, i);
+    }
+    for (int i = 420; i <= 440; i++)
+    {
+        delay(5);
+        PWMUserInput(5, 0, i);
+    }
+    for (int i = 450; i <= 460; i++)
+    {
+        delay(5);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 390; i >= 340; i--)
+    {
+        delay(5);
+        PWMUserInput(7, 0, i);
+    }
+
+    for (int i = 150; i <= 200; i++)
+    {
+        delay(5);
+        PWMUserInput(4, 0, i);
+    }
+    for (int i = 440; i >= 420; i--)
+    {
+        delay(5);
+        PWMUserInput(5, 0, i);
+    }
+    for (int i = 460; i >= 450; i--)
+    {
+        delay(5);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 340; i <= 390; i++)
+    {
+        delay(5);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 350; i <= 400; i++)
+    {
+        delay(5);
+        PWMUserInput(8, 0, i);
+    }
+}
+
+void YJSP_AP::YJSP::Servo_ArmGrab2_Down()
+{
+    //左平移
+    PWMUserInput(14, 0, 1500); //A1 后退
+    PWMUserInput(2, 0, 1500);  //A2 前进
+    PWMUserInput(13, 0, 1500); //B1 前进
+    PWMUserInput(1, 0, 1500);  //B2 后退
+    delay(1000);
+    PWMUserInput(14, 0, 0); //A1 后退
+    PWMUserInput(2, 0, 0);  //A2 前进
+    PWMUserInput(13, 0, 0); //B1 前进
+    PWMUserInput(1, 0, 0);  //B2 后退
+
+    for (int i = 200; i >= 150; i--)
+    {
+        delay(5);
+        PWMUserInput(4, 0, i);
+    }
+
+    //右平移
+    PWMUserInput(15, 0, 1500); //A1 前进
+    PWMUserInput(3, 0, 1500);  //A2 后退
+    PWMUserInput(12, 0, 1500); //B1 后退
+    PWMUserInput(0, 0, 1500);  //B2 前进
+    delay(1000);
+    PWMUserInput(15, 0, 0); //A1 前进
+    PWMUserInput(3, 0, 0);  //A2 后退
+    PWMUserInput(12, 0, 0); //B1 后退
+    PWMUserInput(0, 0, 0);  //B2 前进
+
+    for (int i = 200; i <= 380; i++)
+    {
+        delay(5);
+        PWMUserInput(7, 0, i);
+    }
+
+    for (int i = 400; i <= 450; i++)
+    {
+        delay(5);
+        PWMUserInput(6, 0, i);
+    }
+    for (int i = 200; i <= 420; i++)
+    {
+        delay(5);
+        PWMUserInput(5, 0, i);
+    }
+    for (int i = 400; i <= 480; i++)
+    {
+        delay(5);
+        PWMUserInput(8, 0, i);
+    }
+    for (int i = 380; i >= 320; i--)
+    {
+        delay(5);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 150; i <= 200; i++)
+    {
+        delay(5);
+        PWMUserInput(4, 0, i);
+    }
+    for (int i = 320; i <= 380; i++)
+    {
+        delay(5);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 480; i >= 400; i--)
+    {
+        delay(5);
+        PWMUserInput(8, 0, i);
+    }
+    for (int i = 380; i <= 390; i++)
+    {
+        delay(5);
+        PWMUserInput(7, 0, i);
+    }
+}
+
+void YJSP_AP::YJSP::Servo_ArmGrab3_Down()
+{
+    //左平移
+    PWMUserInput(14, 0, 1500); //A1 后退
+    PWMUserInput(2, 0, 1500);  //A2 前进
+    PWMUserInput(13, 0, 1500); //B1 前进
+    PWMUserInput(1, 0, 1500);  //B2 后退
+    delay(1000);
+    PWMUserInput(14, 0, 0); //A1 后退
+    PWMUserInput(2, 0, 0);  //A2 前进
+    PWMUserInput(13, 0, 0); //B1 前进
+    PWMUserInput(1, 0, 0);  //B2 后退
+
+    for (int i = 200; i >= 150; i--)
+    {
+        delay(5);
+        PWMUserInput(4, 0, i);
+    }
+
+    //右平移
+    PWMUserInput(15, 0, 1500); //A1 前进
+    PWMUserInput(3, 0, 1500);  //A2 后退
+    PWMUserInput(12, 0, 1500); //B1 后退
+    PWMUserInput(0, 0, 1500);  //B2 前进
+    delay(1000);
+    PWMUserInput(15, 0, 0); //A1 前进
+    PWMUserInput(3, 0, 0);  //A2 后退
+    PWMUserInput(12, 0, 0); //B1 后退
+    PWMUserInput(0, 0, 0);  //B2 前进
+
+    for (int i = 200; i <= 230; i++)
+    {
+        delay(5);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 400; i >= 100; i--)
+    {
+        delay(5);
         PWMUserInput(6, 0, i);
     }
 
-    for (int i = 380; i >= 300; i--)
+    for (int i = 200; i <= 230; i++)
+    {
+        delay(5);
+        PWMUserInput(5, 0, i);
+    }
+
+    for (int i = 150; i <= 200; i++)
+    {
+        delay(5);
+        PWMUserInput(4, 0, i);
+    }
+
+    for (int i = 230; i <= 320; i++)
+    {
+        delay(5);
+        PWMUserInput(5, 0, i);
+    }
+
+    for (int i = 100; i <= 120; i++)
+    {
+        delay(5);
+        PWMUserInput(6, 0, i);
+    }
+
+    for (int i = 230; i <= 305; i++)
     {
         delay(5);
         PWMUserInput(7, 0, i);
     }
 
-    for (int i = 355; i <= 410; i++)
+    for (int i = 120; i <= 300; i++)
     {
-        delay(10);
+        delay(5);
+        PWMUserInput(6, 0, i);
+    }
+
+    for (int i = 305; i <= 390; i++)
+    {
+        delay(5);
+        PWMUserInput(7, 0, i);
+    }
+
+    for (int i = 300; i <= 450; i++)
+    {
+        delay(5);
+        PWMUserInput(6, 0, i);
+    }
+
+    for (int i = 320; i <= 420; i++)
+    {
+        delay(5);
+        PWMUserInput(5, 0, i);
+    }
+}
+
+void YJSP_AP::YJSP::Servo_Over()
+{
+    for (int i = 390; i >= 380; i--)
+    {
+        delay(7);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 400; i >= 270; i--)
+    {
+        delay(7);
         PWMUserInput(8, 0, i);
     }
-
-    for (int i = 300; i <= 400; i++)
+    for (int i = 380; i <= 390; i++)
     {
-        delay(5);
+        delay(7);
         PWMUserInput(7, 0, i);
     }
-
-    for (int i = 300; i >= 120; i--)
+    for (int i = 390; i >= 360; i--)
     {
-        delay(10);
+        delay(7);
+        PWMUserInput(7, 0, i);
+    }
+    for (int i = 200; i >= 150; i--)
+    {
+        delay(7);
+        PWMUserInput(4, 0, i);
+    }
+    for (int i = 450; i <= 480; i++)
+    {
+        delay(7);
         PWMUserInput(6, 0, i);
     }
 }

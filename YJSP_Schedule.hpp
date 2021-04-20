@@ -24,18 +24,28 @@ namespace YJSP_AP
         void RCThreadREG();
         void ESCThreadREG();
         void DEBUGThreadREG();
-        void UserInput(int Forward, int Horizontal, int Yaw, int Input_Yaw);
+        void UserInput(int Forward, int Horizontal, int Yaw, int Input_Yaw, bool DisableSpeed);
         void UserLocationSet(int TargetX, int TargetY);
         void PWMUserInput(int pinBase, int on, int off);
         void Servo_ArmGrab1();
         void Servo_ArmGrab2();
         void Servo_ArmGrab3();
+        void Servo_ArmGrab1_Down();
+        void Servo_ArmGrab2_Down();
+        void Servo_ArmGrab3_Down();
         void Servo_ArmPlace1();
         void Servo_ArmPlace2();
         void Servo_ArmPlace3();
+        void Servo1_Place_Up();
+        void Servo2_Place_Up();
+        void Servo3_Place_Up();
         void Servo_ArmGet1();
         void Servo_ArmGet2();
         void Servo_ArmGet3();
+        void Servo_Scanner();
+        void Servo_Scanner_Down();
+        void QRScanner();
+        void Servo_Over();
         YJSP_AP::YJSP &&OnRCDataCome(std::function<void(int *)> call_BACK)
         {
             OnRCDataInComing = call_BACK;
@@ -122,13 +132,15 @@ namespace YJSP_AP
             float TotalHorDFilter = 0;
 
             bool IsPositionDisable = false;
-            bool IsSpeedDisable = true;
+            bool IsSpeedDisable = false;
             float UserTargetPostionX = 0;
             float UserTargetPostionY = 0;
         } PF;
 
         struct ESCData
         {
+            double MOVE_X = 0;
+            double MOVE_Y = 0;
             double SPEED_X = 0;
             double SPEED_X_EKF = 0;
             double SPEED_Y = 0;
@@ -156,6 +168,16 @@ namespace YJSP_AP
             int TimeMax = 1000;
 
             int ClearCount = 0;
+
+            bool QR_Number = false;
+            bool Red = false;
+            bool Green = false;
+            bool Blue = false;
+
+            int H_LOW = 0, S_LOW = 0, V_LOW = 0;
+            int H_HIGH = 179;
+            int S_HIGH = 255;
+            int V_HIGH = 255;
 
         } TF;
 

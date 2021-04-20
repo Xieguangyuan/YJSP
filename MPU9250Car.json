@@ -17,13 +17,13 @@
     "_Car_MPU9250_A_Y_Scal": 0.9881785283474065,
     "_Car_MPU9250_A_Z_Cali": -63.5,
     "_Car_MPU9250_A_Z_Scal": 0.9868690519214552,
-    "_Car_PIDYawPGain": 3,
+    "_Car_PIDYawPGain": 3.5,
     "_Car_PIDYawIGain": 0.075,
-    "_Car_PIDYawDGain": 15,
-    "_Car_PIDForwardPGain": 3.5,
+    "_Car_PIDYawDGain": 45,
+    "_Car_PIDForwardPGain": 3.0,
     "_Car_PIDForwardIGain": 0,
-    "_Car_PIDForwardDGain": 5,
-    "_Car_PIDHorizontalPGain": 4.0,
+    "_Car_PIDForwardDGain": 8,
+    "_Car_PIDHorizontalPGain": 4.5,
     "_Car_PIDHorizontalIGain": 0,
     "_Car_PIDHorizontalDGain": 10
 }

@@ -26,16 +26,7 @@ float YawOutput = 0;
 float CXOutput = 0;
 float CXOutputILast = 0;
 float CXOutputDLast = 0;
-bool QR_Number = false;
-bool Red = false;
-bool Green = false;
-bool Blue = false;
-
-int H_LOW = 0, S_LOW = 0, V_LOW = 0;
-int H_HIGH = 179;
-int S_HIGH = 255;
-int V_HIGH = 255;
-
+double CXInput = 280;
 int cx = 0;
 int cy = 0;
 
@@ -73,9 +64,9 @@ int main(int argc, char *argv[])
                 resize(src, src, cv::Size(640, 480));
                 rotate(src, src, cv::ROTATE_180);
                 cvtColor(src, tmp, COLOR_BGR2HSV);
-                //inRange(tmp, Scalar(90, 160, 0), Scalar(100, 255, 255), tmp); //blue               Scalar(LOW_H,LOW_S,LOW_V),Scalar(HIGH_H,HIGH_S,HIGH_V)
+                inRange(tmp, Scalar(90, 160, 0), Scalar(100, 255, 255), tmp); //blue               Scalar(LOW_H,LOW_S,LOW_V),Scalar(HIGH_H,HIGH_S,HIGH_V)
                 //inRange(tmp, Scalar(60, 80, 70), Scalar(90, 140, 255), tmp); //green
-                inRange(tmp, Scalar(150, 160, 0), Scalar(179, 255, 255), tmp); //red
+                //inRange(tmp, Scalar(150, 160, 0), Scalar(179, 255, 255), tmp); //red
 
                 erode(tmp, tmp, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));    //腐蚀
                 dilate(tmp, tmp, getStructuringElement(MORPH_ELLIPSE, Size(20, 20))); //膨胀
@@ -207,6 +198,10 @@ int main(int argc, char *argv[])
             cv::Mat src;
             cv::Mat tmp;
             cv::Mat QRTmp;
+            int HSVTrack = -1;
+            bool MissionSet = false;
+            bool StartTracking = false;
+            std::queue<int> MissionQueue;
             bool MissonStartFlag = false;
             std::string dataBuffer[256];
             std::queue<std::string> dataQueue;
@@ -236,50 +231,85 @@ int main(int argc, char *argv[])
                     rotate(src, src, cv::ROTATE_180);
                     syncBuffer.pushFrame(src);
                     cvtColor(src, tmp, COLOR_BGR2HSV);
-                    inRange(tmp, Scalar(H_LOW, S_LOW, V_LOW), Scalar(H_HIGH, S_HIGH, V_HIGH), tmp); //red //Scalar(LOW_H,LOW_S,LOW_V),Scalar(HIGH_H,HIGH_S,HIGH_V)
-
-                    erode(tmp, tmp, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));    //腐蚀
-                    dilate(tmp, tmp, getStructuringElement(MORPH_ELLIPSE, Size(20, 20))); //膨胀
-
-                    std::vector<std::vector<cv::Point>> contours;
-                    findContours(tmp, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
-                    MAX_Area = 0;
-                    int upY = INT_MAX, lowY = 0, upX, lowX;
-                    for (int i = 0; i < contours.size(); i++)
+                    if (StartTracking && MissionSet)
                     {
-                        if (contourArea(contours[i]) > 100)
+                        if (MissionQueue.front() != '+')
                         {
-                            if (contourArea(contours[i]) > MAX_Area)
-                            {
-                                MAX_Area = contourArea(contours[i]);
-                                for (int j = 0; j < contours[i].size(); j++)
-                                {
-                                    if (contours[i][j].y > lowY)
-                                    {
-                                        lowY = contours[i][j].y;
-                                        lowX = contours[i][j].x;
-                                    }
-                                    if (contours[i][j].y < upY)
-                                    {
-                                        upY = contours[i][j].y;
-                                        upX = contours[i][j].x;
-                                    }
-                                }
-                                std::vector<cv::Moments> mu(contours.size());
-                                mu[i] = moments(contours[i], false);
-                                cx = mu[i].m10 / mu[i].m00;
-                                cy = mu[i].m01 / mu[i].m00;
-                            }
+                            HSVTrack = MissionQueue.front();
                         }
-                        //
-                        double CXInput = cx - 280;
-                        // PIDCaclOut(CXInput, CXInput, CXInput, CXOutput, CXOutputILast, CXOutputDLast, 0.5, 0, 0, 100.f);
 
-                        // SPGO.UserInput(CXOutput, 0, 0, 0);
-                        circle(src, Point(cx, cy), 10, Scalar(0, 0, 0));
-                        imshow("AICamer", src);
-                        cv::waitKey(10);
+                        MissionQueue.pop();
+                        MissionSet = false;
                     }
+
+                    if (HSVTrack == '1')
+                    {
+                        SPGO.TF.H_LOW = 150, SPGO.TF.S_LOW = 0, SPGO.TF.V_LOW = 0;
+                        SPGO.TF.H_HIGH = 179;
+                        SPGO.TF.S_HIGH = 255;
+                        SPGO.TF.V_HIGH = 255;
+                    }
+                    else if (HSVTrack == '2')
+                    {
+                        SPGO.TF.H_LOW = 60, SPGO.TF.S_LOW = 10, SPGO.TF.V_LOW = 00;
+                        SPGO.TF.H_HIGH = 75;
+                        SPGO.TF.S_HIGH = 255;
+                        SPGO.TF.V_HIGH = 255;
+                    }
+                    else if (HSVTrack == '3')
+                    {
+                        SPGO.TF.H_LOW = 100, SPGO.TF.S_LOW = 120, SPGO.TF.V_LOW = 0;
+                        SPGO.TF.H_HIGH = 130;
+                        SPGO.TF.S_HIGH = 210;
+                        SPGO.TF.V_HIGH = 255;
+                    }
+
+                    if (HSVTrack != -1)
+                    {
+                        inRange(tmp, Scalar(SPGO.TF.H_LOW, SPGO.TF.S_LOW, SPGO.TF.V_LOW), Scalar(SPGO.TF.H_HIGH, SPGO.TF.S_HIGH, SPGO.TF.V_HIGH), tmp); //red //Scalar(LOW_H,LOW_S,LOW_V),Scalar(HIGH_H,HIGH_S,HIGH_V)
+
+                        erode(tmp, tmp, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));    //腐蚀
+                        dilate(tmp, tmp, getStructuringElement(MORPH_ELLIPSE, Size(20, 20))); //膨胀
+
+                        std::vector<std::vector<cv::Point>> contours;
+                        findContours(tmp, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
+                        MAX_Area = 0;
+                        int upY = INT_MAX, lowY = 0, upX, lowX;
+                        for (int i = 0; i < contours.size(); i++)
+                        {
+                            if (contourArea(contours[i]) > 100)
+                            {
+                                if (contourArea(contours[i]) > MAX_Area)
+                                {
+                                    MAX_Area = contourArea(contours[i]);
+                                    for (int j = 0; j < contours[i].size(); j++)
+                                    {
+                                        if (contours[i][j].y > lowY)
+                                        {
+                                            lowY = contours[i][j].y;
+                                            lowX = contours[i][j].x;
+                                        }
+                                        if (contours[i][j].y < upY)
+                                        {
+                                            upY = contours[i][j].y;
+                                            upX = contours[i][j].x;
+                                        }
+                                    }
+                                    std::vector<cv::Moments> mu(contours.size());
+                                    mu[i] = moments(contours[i], false);
+                                    cx = mu[i].m10 / mu[i].m00;
+                                    cy = mu[i].m01 / mu[i].m00;
+                                }
+                            }
+                            //
+                            CXInput = cx - 280;
+                            PIDCaclOut(CXInput, CXInput, CXInput, CXOutput, CXOutputILast, CXOutputDLast, 0.5, 0, 0, 100.f);
+                            SPGO.UserInput(CXOutput, 0, 0, 0, false);
+                        }
+                    }
+                    circle(src, Point(cx, cy), 10, Scalar(0, 0, 0));
+                    imshow("AICamer", src);
+                    cv::waitKey(10);
                 }
             });
 
@@ -294,41 +324,18 @@ int main(int argc, char *argv[])
                         {
                             decodeOB = myScanner.QRCodeDecoder(QRTmp);
                             QRTmp = QRSCanner::QRCodeDrawer(decodeOB, QRTmp);
-                            for (size_t i = 0; i < decodeOB.size(); i++)
+                            if (decodeOB.size() > 0)
                             {
-                                if (decodeOB[i].data == "123+321")
+                                char *Data = (char *)decodeOB[0].data.c_str();
+                                lcd1602SetCursor(9, 0);
+                                lcd1602WriteString(Data);
+                                digitalWrite(29, HIGH);
+                                delay(500);
+                                digitalWrite(29, LOW);
+                                for (int i = 0; i < decodeOB[0].data.size(); i++)
                                 {
-                                    lcd1602SetCursor(9, 0);
-                                    lcd1602WriteString("123+321");
-                                }
-                                QR_Number = true;
-                            }
-                        }
-                        if (QR_Number)
-                        {
-                            H_LOW = 150, S_LOW = 160, V_LOW = 0;
-                            H_HIGH = 179;
-                            S_HIGH = 255;
-                            V_HIGH = 255;
-
-                            if (Green)
-                            {
-                                H_LOW = 60, S_LOW = 80, V_LOW = 70;
-                                H_HIGH = 90;
-                                S_HIGH = 140;
-                                V_HIGH = 255;
-                            }
-                            if (Blue)
-                            {
-                                H_LOW = 90, S_LOW = 160, V_LOW = 0;
-                                H_HIGH = 100;
-                                S_HIGH = 255;
-                                V_HIGH = 255;
-                            }
-                            if (SPGO.SF.speed_x == 0)
-                            {
-                                if (290 < cx < 270)
-                                {
+                                    std::cout << Data[i] << "\n";
+                                    MissionQueue.push(Data[i]);
                                 }
                             }
                         }
@@ -340,12 +347,184 @@ int main(int argc, char *argv[])
             });
 
             std::thread Mission = std::thread([&] {
+                //lcd1602Clear();
+                SPGO.Servo_Scanner();
+                sleep(1);
+                SPGO.UserInput(0, 0, 0, 0, false);
                 while (!MissonStartFlag)
                     usleep(50000);
-                SPGO.UserLocationSet(SPGO.SF.distance_X, 40);
-                while (!(37 < SPGO.SF.distance_Y && SPGO.SF.distance_Y < 43))
+                SPGO.UserLocationSet(SPGO.EF.MOVE_X, SPGO.EF.MOVE_Y);
+                // while (!(38 < SPGO.EF.MOVE_Y && SPGO.EF.MOVE_Y < 42))
+                //     usleep(50000);
+                SPGO.UserLocationSet(175, 30);
+                SPGO.QRScanner();
+                //===========================================================
+                SPGO.UserLocationSet(50, 28);
+                while (!(47 < SPGO.EF.MOVE_X && SPGO.EF.MOVE_X < 53 && 25 < SPGO.EF.MOVE_Y && SPGO.EF.MOVE_Y < 30))
                     usleep(50000);
-                SPGO.UserLocationSet(100, 40);
+                StartTracking = true;
+                MissionSet = true;
+                sleep(2);
+                while (!(-50 < CXInput && CXInput < 50 && 5 > SPGO.EF.SPEED_X && SPGO.EF.SPEED_X > -5 && 25 < SPGO.EF.MOVE_Y && SPGO.EF.MOVE_Y < 30))
+                    usleep(50000);
+                SPGO.UserInput(0, 0, 0, 0, true);
+                if (HSVTrack == '1')
+                {
+                    HSVTrack = -1;
+                    SPGO.Servo_ArmGrab2();
+                }
+                else if (HSVTrack == '2')
+                {
+                    HSVTrack = -1;
+                    SPGO.Servo_ArmGrab1();
+                }
+                else if (HSVTrack == '3')
+                {
+                    HSVTrack = -1;
+                    SPGO.Servo_ArmGrab3();
+                }
+                SPGO.UserInput(0, 0, 0, 0, false);
+                //==============================================================
+                SPGO.UserLocationSet(50, 28);
+                while (!(47 < SPGO.EF.MOVE_X && SPGO.EF.MOVE_X < 53 && 25 < SPGO.EF.MOVE_Y && SPGO.EF.MOVE_Y < 30))
+                    usleep(50000);
+                MissionSet = true;
+                sleep(1);
+                while (!(-50 < CXInput && CXInput < 50 && 5 > SPGO.EF.SPEED_X && SPGO.EF.SPEED_X > -5 && 25 < SPGO.EF.MOVE_Y && SPGO.EF.MOVE_Y < 30))
+                    usleep(50000);
+                SPGO.UserInput(0, 0, 0, 0, true);
+                if (HSVTrack == '1')
+                {
+                    HSVTrack = -1;
+                    SPGO.Servo_ArmGrab2();
+                }
+                else if (HSVTrack == '2')
+                {
+                    HSVTrack = -1;
+                    SPGO.Servo_ArmGrab1();
+                }
+                else if (HSVTrack == '3')
+                {
+                    HSVTrack = -1;
+                    SPGO.Servo_ArmGrab3();
+                }
+                SPGO.UserInput(0, 0, 0, 0, false);
+                //=============================================================
+                SPGO.UserLocationSet(50, 28);
+                while (!(47 < SPGO.EF.MOVE_X && SPGO.EF.MOVE_X < 53 && 25 < SPGO.EF.MOVE_Y && SPGO.EF.MOVE_Y < 30))
+                    usleep(50000);
+                MissionSet = true;
+                sleep(2);
+                while (!(-50 < CXInput && CXInput < 50 && 5 > SPGO.EF.SPEED_X && SPGO.EF.SPEED_X > -5 && 25 < SPGO.EF.MOVE_Y && SPGO.EF.MOVE_Y < 30))
+                    usleep(50000);
+                SPGO.UserInput(0, 0, 0, 0, true);
+                if (HSVTrack == '1')
+                {
+                    HSVTrack = -1;
+                    SPGO.Servo_ArmGrab2();
+                }
+                else if (HSVTrack == '2')
+                {
+                    HSVTrack = -1;
+                    SPGO.Servo_ArmGrab1();
+                }
+                else if (HSVTrack == '3')
+                {
+                    HSVTrack = -1;
+                    SPGO.Servo_ArmGrab3();
+                }
+
+                //============================================
+                SPGO.UserInput(0, 0, 0, 80, true);
+                while (!(78 < SPGO.SF.Real_Yaw && SPGO.SF.Real_Yaw < 82))
+                    usleep(50000);
+                SPGO.UserInput(0, 0, 0, 80, false);
+                SPGO.UserLocationSet(SPGO.EF.MOVE_X, 30);
+                while (!(25 < SPGO.EF.MOVE_Y && SPGO.EF.MOVE_Y < 35))
+                    usleep(50000);
+                SPGO.UserLocationSet(125, 35);
+                while (!(5 > SPGO.EF.SPEED_X && SPGO.EF.SPEED_X > -5 && 30 < SPGO.EF.MOVE_Y && SPGO.EF.MOVE_Y < 40 && 120 < SPGO.EF.MOVE_X && SPGO.EF.MOVE_X < 130))
+                    usleep(50000);
+                SPGO.UserInput(0, 0, 0, 80, true);
+                SPGO.Servo_ArmPlace2();
+                SPGO.UserInput(0, 0, 0, 80, false);
+                //=================================================
+                SPGO.UserLocationSet(108, 35);
+                while (!(5 > SPGO.EF.SPEED_X && SPGO.EF.SPEED_X > -5 && 30 < SPGO.EF.MOVE_Y && SPGO.EF.MOVE_Y < 40 && 103 < SPGO.EF.MOVE_X && SPGO.EF.MOVE_X < 113))
+                    usleep(50000);
+                SPGO.UserInput(0, 0, 0, 80, true);
+                SPGO.Servo_ArmPlace1();
+                SPGO.UserInput(0, 0, 0, 80, false);
+                //====================================
+                SPGO.UserLocationSet(95, 35);
+                while (!(5 > SPGO.EF.SPEED_X && SPGO.EF.SPEED_X > -5 && 30 < SPGO.EF.MOVE_Y && SPGO.EF.MOVE_Y < 40 && 90 < SPGO.EF.MOVE_X && SPGO.EF.MOVE_X < 100))
+                    usleep(50000);
+                SPGO.UserInput(0, 0, 0, 80, true);
+                SPGO.Servo_ArmPlace3();
+                //======================================
+                SPGO.Servo_ArmGet3();
+                SPGO.UserInput(0, 0, 0, 80, false);
+                //=======================================
+                SPGO.UserLocationSet(108, 35);
+                while (!(5 > SPGO.EF.SPEED_X && SPGO.EF.SPEED_X > -5 && 30 < SPGO.EF.MOVE_Y && SPGO.EF.MOVE_Y < 40 && 103 < SPGO.EF.MOVE_X && SPGO.EF.MOVE_X < 113))
+                    usleep(50000);
+                SPGO.UserInput(0, 0, 0, 80, true);
+                SPGO.Servo_ArmGet2();
+                SPGO.UserInput(0, 0, 0, 80, false);
+                //======================================
+                SPGO.UserLocationSet(125, 35);
+                while (!(5 > SPGO.EF.SPEED_X && SPGO.EF.SPEED_X > -5 && 30 < SPGO.EF.MOVE_Y && SPGO.EF.MOVE_Y < 40 && 120 < SPGO.EF.MOVE_X && SPGO.EF.MOVE_X < 130))
+                    usleep(50000);
+                SPGO.UserInput(0, 0, 0, 80, true);
+                SPGO.Servo_ArmGet1();
+                //==============================================
+                SPGO.UserInput(0, 0, 0, 80, false);
+                SPGO.UserLocationSet(95, 35);
+                while (!(5 > SPGO.EF.SPEED_X && SPGO.EF.SPEED_X > -5 && 30 < SPGO.EF.MOVE_Y && SPGO.EF.MOVE_Y < 40 && 90 < SPGO.EF.MOVE_X && SPGO.EF.MOVE_X < 100))
+                    usleep(50000);
+                SPGO.UserLocationSet(95, 135);
+                while (!(5 > SPGO.EF.SPEED_X && SPGO.EF.SPEED_X > -5 && 130 < SPGO.EF.MOVE_Y && SPGO.EF.MOVE_Y < 140 && 90 < SPGO.EF.MOVE_X && SPGO.EF.MOVE_X < 100))
+                    usleep(50000);
+                SPGO.UserLocationSet(30, 140);
+                while (!(5 > SPGO.EF.SPEED_X && SPGO.EF.SPEED_X > -5 && 135 < SPGO.EF.MOVE_Y && SPGO.EF.MOVE_Y < 145 && 25 < SPGO.EF.MOVE_X && SPGO.EF.MOVE_X < 35))
+                    usleep(50000);
+                SPGO.UserInput(0, 0, 0, 0, true);
+                while (!(-3 < SPGO.SF.Real_Yaw && SPGO.SF.Real_Yaw < 3))
+                    usleep(50000);
+                SPGO.UserInput(0, 0, 0, 0, false);
+                //=========================================
+                SPGO.UserLocationSet(147, 188);
+                while (!(5 > SPGO.EF.SPEED_X && SPGO.EF.SPEED_X > -5 && 183 < SPGO.EF.MOVE_Y && SPGO.EF.MOVE_Y < 193 && 142 < SPGO.EF.MOVE_X && SPGO.EF.MOVE_X < 152))
+                    usleep(50000);
+                SPGO.UserInput(0, 0, 0, 0, true);
+                SPGO.Servo3_Place_Up();
+                SPGO.UserInput(0, 0, 0, 0, false);
+                //=============================================
+                SPGO.UserLocationSet(128, 188);
+                while (!(5 > SPGO.EF.SPEED_X && SPGO.EF.SPEED_X > -5 && 183 < SPGO.EF.MOVE_Y && SPGO.EF.MOVE_Y < 193 && 123 < SPGO.EF.MOVE_X && SPGO.EF.MOVE_X < 133))
+                    usleep(50000);
+                SPGO.UserInput(0, 0, 0, 0, true);
+                SPGO.Servo2_Place_Up();
+                SPGO.UserInput(0, 0, 0, 0, false);
+                //=========================================
+                SPGO.UserLocationSet(112, 188);
+                while (!(5 > SPGO.EF.SPEED_X && SPGO.EF.SPEED_X > -5 && 183 < SPGO.EF.MOVE_Y && SPGO.EF.MOVE_Y < 193 && 107 < SPGO.EF.MOVE_X && SPGO.EF.MOVE_X < 117))
+                    usleep(50000);
+                SPGO.UserInput(0, 0, 0, 0, true);
+                SPGO.Servo1_Place_Up();
+                SPGO.UserInput(0, 0, 0, 0, false);
+                //================================================
+                SPGO.UserLocationSet(235, 215);
+                while (!(230 < SPGO.EF.MOVE_X && SPGO.EF.MOVE_X < 240 && 210 < SPGO.EF.MOVE_Y && SPGO.EF.MOVE_Y < 220))
+                    usleep(50000);
+                SPGO.UserInput(0, 0, 0, 0, true);
+                sleep(3);
+                SPGO.Servo_Over();
+                lcd1602SetCursor(0, 1);
+                lcd1602WriteString("Mission is over!");
+                digitalWrite(29, HIGH);
+                delay(1000);
+                digitalWrite(29, LOW);
             });
 
             SPGO.OnRCDataCome([&](auto *RCData) {
@@ -357,6 +536,8 @@ int main(int argc, char *argv[])
                 {
                     MissonStartFlag = false;
                 }
+
+                // if(RCData[9] > 1700 && RCData[9] < 2000)
             });
 
             SPGO.DEBUGThreadREG();
@@ -365,29 +546,9 @@ int main(int argc, char *argv[])
         break;
         case 'F':
         {
-            V4L2Tools::V4L2Drive cap("/dev/video0", {.ImgWidth = 256,
-                                                     .ImgHeight = 192,
-                                                     .FrameBuffer = 1,
-                                                     .Is_fastMode = true,
-                                                     .PixFormat = V4L2_PIX_FMT_YUYV});
-            cap.V4L2Control(V4L2_CID_ZOOM_ABSOLUTE, 0x8005);
-            usleep(50000);
-            cap.V4L2Control(V4L2_CID_ZOOM_ABSOLUTE, 0x8801);
-            cv::namedWindow("test", cv::WINDOW_NORMAL);
-            cv::setWindowProperty("test", cv::WND_PROP_FULLSCREEN, cv::WINDOW_FULLSCREEN);
-            unsigned char *tmpDataBGR = cap.RGB24DataInit();
-            while (true)
-            {
-                unsigned char *tmpData = cap.V4L2Read();
-                cap.yuyv2rgb24(tmpData, tmpDataBGR, 256, 192);
-                cv::Mat tmpMat = cv::Mat(192, 256, CV_8UC3, tmpDataBGR);
-
-                cv::resize(tmpMat, tmpMat, cv::Size(800, 600));
-                //cv::rotate(tmpMat, tmpMat, cv::ROTATE_180);
-
-                imshow("test", tmpMat);
-                cv::waitKey(10);
-            }
+            YJSP_AP::YJSP SPGO;
+            SPGO.YJSP_Init();
+            SPGO.Servo_Over();
         }
         break;
         case 'T':
@@ -435,8 +596,8 @@ int main(int argc, char *argv[])
 
                 inRange(imgHSV, Scalar(iLowH, iLowS, iLowV), Scalar(iHighH, iHighS, iHighV), imgThresholded);
 
-                erode(imgThresholded, imgThresholded, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));    //腐蚀
-                dilate(imgThresholded, imgThresholded, getStructuringElement(MORPH_ELLIPSE, Size(20, 20))); //膨胀
+                erode(imgThresholded, imgThresholded, getStructuringElement(MORPH_ELLIPSE, Size(12, 12)));  //腐蚀
+                dilate(imgThresholded, imgThresholded, getStructuringElement(MORPH_ELLIPSE, Size(18, 18))); //膨胀
 
                 imshow("Thresholded Image", imgThresholded);
                 imshow("Original", imgOriginal);
@@ -472,6 +633,7 @@ int main(int argc, char *argv[])
                 if (Test.newDataReady())
                 {
                     now = (int)(Test.getDistance() / 10.f);
+
                     nowL = nowL * 0.7 + now * 0.3;
                     speed = (nowL - Last) / (100000.f / 1000000.f);
                     std::cout << nowL << " ";

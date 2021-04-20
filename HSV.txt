@@ -54,3 +54,51 @@
                     break;
                 }
             }
+
+              if (HSVTrack == '1')
+                    {
+                        SPGO.TF.H_LOW = 150, SPGO.TF.S_LOW = 160, SPGO.TF.V_LOW = 0;
+                        SPGO.TF.H_HIGH = 179;
+                        SPGO.TF.S_HIGH = 255;
+                        SPGO.TF.V_HIGH = 255;
+                    }
+                    else if (HSVTrack == '2')
+                    {
+                        SPGO.TF.H_LOW = 60, SPGO.TF.S_LOW = 80, SPGO.TF.V_LOW = 70;
+                        SPGO.TF.H_HIGH = 90;
+                        SPGO.TF.S_HIGH = 140;
+                        SPGO.TF.V_HIGH = 255;
+                    }
+                    else if (HSVTrack == '3')
+                    {
+                        SPGO.TF.H_LOW = 90, SPGO.TF.S_LOW = 160, SPGO.TF.V_LOW = 0;
+                        SPGO.TF.H_HIGH = 100;
+                        SPGO.TF.S_HIGH = 255;
+                        SPGO.TF.V_HIGH = 255;
+                    }
+
+
+
+                      V4L2Tools::V4L2Drive cap("/dev/video0", {.ImgWidth = 256,
+                                                     .ImgHeight = 192,
+                                                     .FrameBuffer = 1,
+                                                     .Is_fastMode = true,
+                                                     .PixFormat = V4L2_PIX_FMT_YUYV});
+            cap.V4L2Control(V4L2_CID_ZOOM_ABSOLUTE, 0x8005);
+            usleep(50000);
+            cap.V4L2Control(V4L2_CID_ZOOM_ABSOLUTE, 0x8801);
+            cv::namedWindow("test", cv::WINDOW_NORMAL);
+            cv::setWindowProperty("test", cv::WND_PROP_FULLSCREEN, cv::WINDOW_FULLSCREEN);
+            unsigned char *tmpDataBGR = cap.RGB24DataInit();
+            while (true)
+            {
+                unsigned char *tmpData = cap.V4L2Read();
+                cap.yuyv2rgb24(tmpData, tmpDataBGR, 256, 192);
+                cv::Mat tmpMat = cv::Mat(192, 256, CV_8UC3, tmpDataBGR);
+
+                cv::resize(tmpMat, tmpMat, cv::Size(800, 600));
+                //cv::rotate(tmpMat, tmpMat, cv::ROTATE_180);
+
+                imshow("test", tmpMat);
+                cv::waitKey(10);
+            }
